@@ -15,6 +15,8 @@
   - 作品有寫 github: "帳號/專案名稱" 的話，網站會自己去 GitHub 的 Releases
     抓最新版本、檔案大小和下載連結。所以你只要在 GitHub 發布新版，
     網站的下載按鈕就會自動變成最新的，不用改這個檔案。
+  - Release 裡檔名有 "-update-" 的檔案（例如 RiotAccountHub-update-v1.0.4.zip）是「更新包」，
+    網站會在下載按鈕下面另外放一個「下載更新包」，給已經在用舊版的人。
   - 下面的 versions 是備用的（GitHub 連不上時才會用到），
     也可以在這裡替某一版寫比較短的更新說明（notes）。
   - 作品沒有放在 GitHub 的話，就不要寫 github，
@@ -217,6 +219,7 @@ window.SITE = {
         "可以設定主帳號，其他帳號一鍵套用它的設定",
         "用內建瀏覽器看戰績、逛熱門準星",
         "登入失效時會馬上提醒，按一下就能重新登入",
+        "有新版本時，在程式裡按一下就能更新",
         "遊戲中再按一次按鈕，就能關閉 VALORANT",
         "登入資料用 Windows 內建的加密保護，只有這台電腦解得開"
       ],
@@ -227,6 +230,7 @@ window.SITE = {
         "Set a main account and apply its settings to the others with one click",
         "Check your match history and browse popular crosshairs in the built-in browser",
         "Warns you right away when a saved login stops working, with one click to log in again",
+        "When a new version comes out, update it from inside the app with one click",
         "Click the button again while in game to close VALORANT",
         "Login data is protected with Windows encryption, so only this computer can open it"
       ],
@@ -246,6 +250,26 @@ window.SITE = {
         "Go back to the app and click \"I'm logged in\". After that, click \"Launch\" on an account card to switch"
       ],
       versions: [
+        {
+          version: "1.0.4",
+          date: "2026-11-25",
+          size: "60 MB",
+          url: "https://github.com/yuanleo2009-cpu/RiotAccountHub/releases/download/v1.0.4/RiotAccountHub-v1.0.4.zip",
+          update: {
+            url: "https://github.com/yuanleo2009-cpu/RiotAccountHub/releases/download/v1.0.4/RiotAccountHub-update-v1.0.4.zip",
+            size: "60 MB"
+          },
+          notes: [
+            "新功能：有新版本時，程式上方會出現提示，按「立即更新」就會自動更新",
+            "舊版可以用更新包更新：先打開舊版，再打開更新包裡的程式，按「更新」",
+            "更新包會先檢查檔案指紋，確認沒有被改過才更新"
+          ],
+          notes_en: [
+            "New: when a new version comes out, a notice appears at the top. Click \"Update now\" and it updates itself",
+            "Older versions can use the update package: open the old app, then open the program in the update package and click \"Update\"",
+            "The update package is checked against its published fingerprint before anything is replaced"
+          ]
+        },
         {
           version: "1.0.3",
           date: "2026-11-25",

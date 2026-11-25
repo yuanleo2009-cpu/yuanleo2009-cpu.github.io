@@ -47,6 +47,10 @@
       secHistory: "更新紀錄",
       latest: "最新",
       dlThis: "下載這個版本",
+      updAsk: "已經在用舊版？",
+      updLink: "下載更新包",
+      updHint: "打開裡面的程式、按「更新」就好，帳號和設定都會保留。",
+      updShort: "更新包",
       more: "其他作品",
       noVersion: "這個作品還沒有可以下載的版本。",
       nfTitle: "找不到這個作品",
@@ -83,6 +87,10 @@
       secHistory: "Version history",
       latest: "Latest",
       dlThis: "Download this version",
+      updAsk: "Already using an older version?",
+      updLink: "Download the update package",
+      updHint: "Open the program inside and click \"Update\". Your accounts and settings are kept.",
+      updShort: "Update package",
       more: "Other works",
       noVersion: "This one has no download yet.",
       nfTitle: "Can't find this work",
@@ -375,10 +383,15 @@
     });
     return out;
   };
+  // 檔名裡有 "-update-" 的是「更新包」（給已經在用舊版的人），其他的才是完整下載包
+  const isMetaFile = (a) => /\.(sha256|sha512|sig|asc|txt|json|ya?ml)$/i.test(a.name);
+  const isUpdateFile = (a) => /-update-/i.test(a.name);
   const fromReleases = (json) => (Array.isArray(json) ? json : [])
     .filter((r) => r && !r.draft && !r.prerelease && r.tag_name)
     .map((r) => {
-      const file = (r.assets || []).find((a) => !/\.(sha256|sha512|sig|asc|txt|json|ya?ml)$/i.test(a.name));
+      const assets = (r.assets || []).filter((a) => a && a.name && !isMetaFile(a));
+      const file = assets.find((a) => !isUpdateFile(a)) || assets[0];
+      const upd = assets.find((a) => isUpdateFile(a) && a !== file);
       const d = new Date(r.published_at);
       const two = (n) => String(n).padStart(2, "0");
       return {
@@ -386,6 +399,7 @@
         date: isNaN(d) ? "" : d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate()),
         size: file ? fmtSize(file.size) : "",
         url: file ? file.browser_download_url : r.html_url,
+        update: upd ? { url: upd.browser_download_url, size: fmtSize(upd.size) } : null,
         notes: parseNotes(r.body)
       };
     });
@@ -401,6 +415,7 @@
         date: mine.date || r.date,
         size: r.size || mine.size,
         url: r.url,
+        update: r.update || mine.update || null,
         notes: list(mine.notes).length ? mine.notes : r.notes,
         notes_en: mine.notes_en
       };
@@ -881,7 +896,12 @@
           (v
             ? '<div class="dl"><a class="dl__btn" ' + dlAttrs(v.url) + ">" + esc(t("download")) +
               ' <span class="num">v' + esc(v.version) + "</span></a>" +
-              (meta ? '<p class="dl__meta">' + meta + "</p>" : "") + "</div>"
+              (meta ? '<p class="dl__meta">' + meta + "</p>" : "") + "</div>" +
+              (v.update && v.update.url
+                ? '<p class="dl__upd">' + esc(t("updAsk")) + ' <a ' + dlAttrs(v.update.url) + ">" + esc(t("updLink")) + "</a>" +
+                  (v.update.size ? '<span class="dl__updsize">（' + esc(v.update.size) + "）</span>" : "") +
+                  '<br><span class="dl__updhint">' + esc(t("updHint")) + "</span></p>"
+                : "")
             : '<p class="dl__none">' + t("noVersion") + "</p>") +
           (repo ? '<p class="work__src"><a href="https://github.com/' + esc(repo) + '" target="_blank" rel="noopener">' +
             t("source") + "</a></p>" : "") +
@@ -899,7 +919,9 @@
           '<li class="ver"><div class="ver__head"><span class="num">v' + esc(x.version) + "</span>" +
           (n === 0 ? '<span class="ver__tag">' + t("latest") + "</span>" : "") +
           (x.date ? "<time>" + esc(fmtDate(x.date)) + "</time>" : "") +
-          '<a class="ver__dl" ' + dlAttrs(x.url) + ">" + t("dlThis") + "</a></div>" +
+          '<a class="ver__dl" ' + dlAttrs(x.url) + ">" + t("dlThis") + "</a>" +
+          (x.update && x.update.url ? '<a class="ver__dl ver__upd" ' + dlAttrs(x.update.url) + ">" + t("updShort") + "</a>" : "") +
+          "</div>" +
           (list(tx(x, "notes")).length
             ? '<ul class="ver__notes">' + list(tx(x, "notes")).map((s) => "<li>" + esc(s) + "</li>").join("") + "</ul>"
             : "") +

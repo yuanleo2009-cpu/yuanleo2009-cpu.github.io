@@ -699,6 +699,10 @@ main h2 {
 .dl__meta,
 .dl__none { font-size: 15px; color: var(--dim); }
 .dl__none { margin-top: 36px; }
+.dl__upd { margin-top: 14px; font-size: 15px; line-height: 1.7; color: var(--dim); }
+.dl__upd a { color: inherit; font-weight: 700; text-underline-offset: 4px; }
+.dl__upd a:hover { color: var(--c); }
+.dl__updhint { font-size: 14px; }
 .work__src { margin-top: 18px; font-size: 15px; }
 .work__src a { color: var(--dim); text-underline-offset: 4px; }
 .work__src a:hover { color: var(--ink); }
@@ -762,6 +766,7 @@ main h2 {
 .ver__head time { font-size: 15px; color: var(--dim); }
 .ver__dl { margin-left: auto; font-size: 15px; text-underline-offset: 4px; }
 .ver__dl:hover { color: var(--c); }
+.ver__upd { margin-left: 16px; }
 .ver__notes { margin-top: 6px; padding-left: 1.2em; }
 
 @media (max-width: 720px) {
