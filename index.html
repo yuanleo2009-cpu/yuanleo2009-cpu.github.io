@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>作品集</title>
+  <meta name="description" content="個人作品集：每個作品的介紹和最新版下載。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400..900&family=Unbounded:wght@200..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="data.js" defer blocking="render"></script>
+  <script src="js/site.js" defer blocking="render"></script>
+</head>
+<body data-page="home">
+
+  <p class="demo" id="demo" hidden></p>
+
+  <header class="hero" id="top">
+    <nav class="top">
+      <span></span>
+      <div class="top__links">
+        <a href="#works" data-t="navWorks">作品</a>
+        <a href="#about" data-t="navAbout">關於</a>
+        <button class="lang" id="lang" type="button">English</button>
+      </div>
+    </nav>
+
+    <h1 class="hero__name" id="name"></h1>
+
+    <div class="hand" id="hand"></div>
+
+    <p class="hero__cap" id="cap"></p>
+
+    <div class="hero__foot">
+      <p class="hero__intro" id="intro"></p>
+      <button class="draw" id="draw" type="button" data-t="draw">隨機抽一張</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="index" id="works">
+      <div class="index__head">
+        <h2 data-t="allWorks">全部作品</h2>
+        <div class="chips" id="chips"></div>
+      </div>
+      <ul class="rows" id="rows"></ul>
+    </section>
+
+    <section class="about" id="about">
+      <h2 data-t="aboutMe">關於我</h2>
+      <div class="about__text" id="aboutText"></div>
+    </section>
+  </main>
+
+  <footer class="foot" id="foot"></footer>
+
+  <noscript><p class="none">這個網站需要開啟 JavaScript 才看得到內容。</p></noscript>
+</body>
+</html>

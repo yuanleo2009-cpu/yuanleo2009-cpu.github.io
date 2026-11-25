@@ -1,0 +1,952 @@
+/* ============================================================
+   這個檔案負責把 data.js 的內容畫成網頁，還有全部的互動效果。
+   平常不用改它。要改內容請改 data.js。
+   ============================================================ */
+(function () {
+  "use strict";
+
+  const SITE = window.SITE || {};
+  const works = (Array.isArray(SITE.works) ? SITE.works : []).filter((w) => w && w.id != null);
+  const page = document.body.dataset.page;
+
+  const $ = (sel, root) => (root || document).querySelector(sel);
+  const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+  const fine = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const wide = matchMedia("(min-width: 721px)");
+
+  /* ---------- 介面上的固定文字（中文 / 英文） ---------- */
+
+  const UI = {
+    zh: {
+      siteTitle: "{name} 的作品",
+      navWorks: "作品",
+      navAbout: "關於",
+      langBtn: "English",
+      hintMouse: "點卡片看介紹和下載。也可以抓起來甩，或用 ← → 鍵切換",
+      hintTap: "點卡片看介紹和下載",
+      draw: "隨機抽一張",
+      allWorks: "全部作品",
+      all: "全部",
+      aboutMe: "關於我",
+      download: "下載",
+      notOut: "還沒發布",
+      updated: "{date} 更新",
+      sep: "，",
+      secIntro: "介紹",
+      secFeat: "特色",
+      secShots: "截圖",
+      secInstall: "怎麼安裝",
+      secHistory: "更新紀錄",
+      latest: "最新",
+      dlThis: "下載這個版本",
+      more: "其他作品",
+      noVersion: "這個作品還沒有可以下載的版本。",
+      nfTitle: "找不到這個作品",
+      nfBody: "網址裡的作品代號可能打錯了，或是這個作品已經被拿掉。",
+      nfLink: "看全部作品",
+      empty: "還沒有作品。打開 data.js，在 works 裡加第一個。",
+      demo: "現在看到的是範例資料。打開 data.js，換成你自己的作品。",
+      toastDemo: "這是範例資料，還沒有真的下載連結。",
+      toastNone: "這個版本還沒有放下載連結。",
+      backTop: "回到最上面",
+      source: "在 GitHub 看原始碼",
+      shot: "{title} 的截圖 {n}"
+    },
+    en: {
+      siteTitle: "{name}'s works",
+      navWorks: "Works",
+      navAbout: "About",
+      langBtn: "中文",
+      hintMouse: "Click a card to see more and download. You can also grab and throw it, or use the ← → keys",
+      hintTap: "Tap a card to see more and download",
+      draw: "Pick a random one",
+      allWorks: "All works",
+      all: "All",
+      aboutMe: "About me",
+      download: "Download",
+      notOut: "Not out yet",
+      updated: "updated {date}",
+      sep: ", ",
+      secIntro: "About this",
+      secFeat: "Features",
+      secShots: "Screenshots",
+      secInstall: "How to install",
+      secHistory: "Version history",
+      latest: "Latest",
+      dlThis: "Download this version",
+      more: "Other works",
+      noVersion: "This one has no download yet.",
+      nfTitle: "Can't find this work",
+      nfBody: "The link may be wrong, or this work was removed.",
+      nfLink: "See all works",
+      empty: "No works yet. Open data.js and add your first one in works.",
+      demo: "This is sample data. Open data.js and put in your own works.",
+      toastDemo: "This is sample data. There is no real download link yet.",
+      toastNone: "This version has no download link yet.",
+      backTop: "Back to top",
+      source: "See the code on GitHub",
+      shot: "{title} screenshot {n}"
+    }
+  };
+
+  let lang = /^zh/i.test(navigator.language || "zh") ? "zh" : "en";
+  try {
+    const saved = localStorage.getItem("lang");
+    if (saved === "zh" || saved === "en") lang = saved;
+  } catch (e) { /* 存不了就算了，用預設語言 */ }
+
+  const t = (key, vars) => {
+    let s = UI[lang][key] || UI.zh[key] || "";
+    if (vars) Object.keys(vars).forEach((k) => { s = s.replace("{" + k + "}", vars[k]); });
+    return s;
+  };
+  // 拿 data.js 裡的文字：英文版優先用 xxx_en，沒有就用中文
+  const tx = (obj, key) => {
+    const en = obj[key + "_en"];
+    return lang === "en" && en != null && en !== "" ? en : obj[key];
+  };
+  const list = (v) => (Array.isArray(v) ? v : v ? [v] : []);
+
+  /* ---------- 小工具 ---------- */
+
+  const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (ch) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
+  ));
+  const hasLink = (u) => { u = String(u || "").trim(); return u !== "" && u !== "#"; };
+  const safeUrl = (u) => {
+    u = String(u || "").trim();
+    if (!u) return "";
+    if (/^(https?:|mailto:)/i.test(u)) return u;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(u)) return "";
+    return u;
+  };
+  const isOutside = (u) => /^https?:/i.test(u);
+  const colorOf = (w) => {
+    const c = String(w.color || "").trim();
+    return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c) ? c : "#ffffff";
+  };
+  // 這個顏色上面的字，用黑的還是白的比較清楚
+  const onColor = (hex) => {
+    let h = hex.slice(1);
+    if (h.length === 3) h = h.split("").map((x) => x + x).join("");
+    const lin = (i) => {
+      const v = parseInt(h.slice(i, i + 2), 16) / 255;
+      return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    };
+    const L = 0.2126 * lin(0) + 0.7152 * lin(2) + 0.0722 * lin(4);
+    return L > 0.179 ? "#000000" : "#ffffff";
+  };
+  const latest = (w) => (Array.isArray(w.versions) && w.versions.length ? w.versions[0] : null);
+  const fmtDate = (s) => {
+    const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(s || "").trim());
+    return m ? m[1] + "/" + m[2].padStart(2, "0") + "/" + m[3].padStart(2, "0") : String(s || "");
+  };
+  const workUrl = (w) => "work.html?id=" + encodeURIComponent(w.id);
+  const dlAttrs = (url) => {
+    const u = hasLink(url) ? safeUrl(url) : "";
+    if (!u) return 'href="#" data-nolink';
+    return 'href="' + esc(u) + '"' + (isOutside(u) ? ' target="_blank" rel="noopener"' : " download");
+  };
+
+  const hash = (str) => {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  };
+  const prng = (seed) => () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+
+  /* ---------- 卡片 ---------- */
+
+  // 沒有封面圖的時候，自動畫一個圖案（每個作品都不一樣，但每次打開都一樣）
+  function art(w, index) {
+    const rnd = prng(hash(String(w.id)));
+    const f = (v) => v.toFixed(1);
+    let s = "";
+    const kind = index % 4;
+    if (kind === 0) {
+      const cx = 40 + rnd() * 120, cy = 50 + rnd() * 100;
+      for (let r = 12; r < 270; r += 17) {
+        s += '<circle cx="' + f(cx) + '" cy="' + f(cy) + '" r="' + r + '" fill="none" stroke="currentColor" stroke-width="6"/>';
+      }
+    } else if (kind === 1) {
+      const cx = rnd() < 0.5 ? -10 : 210;
+      for (let a = 0; a <= 26; a++) {
+        const ang = Math.PI + Math.PI * (a / 26);
+        s += '<line x1="' + cx + '" y1="212" x2="' + f(cx + Math.cos(ang) * 420) + '" y2="' + f(212 + Math.sin(ang) * 420) +
+          '" stroke="currentColor" stroke-width="5"/>';
+      }
+    } else if (kind === 2) {
+      const fx = rnd() * 200, fy = rnd() * 200;
+      for (let y = 8; y < 200; y += 23) {
+        for (let x = 8; x < 200; x += 23) {
+          const r = Math.max(1.5, 10.5 - Math.hypot(x - fx, y - fy) / 20);
+          s += '<circle cx="' + x + '" cy="' + y + '" r="' + f(r) + '" fill="currentColor"/>';
+        }
+      }
+    } else {
+      let x = -140;
+      s += '<g transform="rotate(' + f(-18 - rnd() * 26) + ' 100 100)">';
+      while (x < 340) {
+        const bw = 4 + rnd() * 22;
+        s += '<rect x="' + f(x) + '" y="-160" width="' + f(bw) + '" height="520" fill="currentColor"/>';
+        x += bw + 6 + rnd() * 16;
+      }
+      s += "</g>";
+    }
+    return '<svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' + s + "</svg>";
+  }
+
+  function cardHTML(w, index) {
+    const c = colorOf(w);
+    const v = latest(w);
+    const cover = safeUrl(w.cover);
+    const icon = safeUrl(w.icon);
+    const title = String(tx(w, "title") || "");
+    const glyph = tx(w, "glyph") || Array.from(title.trim())[0] || "?";
+    const mono = Array.from(String(SITE.name || "?").trim())[0] || "?";
+    return (
+      '<div class="card" style="--c:' + c + ";--on-c:" + onColor(c) + '">' +
+        '<div class="card__top"><span>' + esc(tx(w, "type") || "") + "</span>" +
+          (v ? '<span class="num">v' + esc(v.version) + "</span>" : "") + "</div>" +
+        '<div class="card__art">' +
+          (cover
+            ? '<img src="' + esc(cover) + '" alt="" draggable="false">'
+            : art(w, index) + (icon
+                ? '<img class="card__icon' + (w.pixel ? " is-pixel" : "") + '" src="' + esc(icon) + '" alt="" draggable="false">'
+                : '<span class="card__glyph" aria-hidden="true">' + esc(glyph) + "</span>")) +
+        "</div>" +
+        '<div class="card__body"><div class="card__title">' + esc(title) + "</div>" +
+          '<p class="card__sum">' + esc(tx(w, "summary") || "") + "</p></div>" +
+        '<div class="card__back" aria-hidden="true"><span>' + esc(mono) + "</span></div>" +
+        '<div class="card__foil"></div><div class="card__glare"></div>' +
+      "</div>"
+    );
+  }
+
+  // 游標在卡片上移動：卡片跟著傾斜，反光跟著跑
+  function tilt(zone, card) {
+    if (!fine) return;
+    zone.addEventListener("pointermove", (e) => {
+      if (zone.classList.contains("is-drag") || zone.classList.contains("is-spring")) return;
+      const r = card.getBoundingClientRect();
+      const x = clamp((e.clientX - r.left) / r.width, 0, 1);
+      const y = clamp((e.clientY - r.top) / r.height, 0, 1);
+      card.style.setProperty("--px", (x * 100).toFixed(1));
+      card.style.setProperty("--py", (y * 100).toFixed(1));
+      if (!calm) {
+        card.style.setProperty("--ry", ((x - 0.5) * 24).toFixed(2) + "deg");
+        card.style.setProperty("--rx", ((0.5 - y) * 20).toFixed(2) + "deg");
+      }
+    });
+    zone.addEventListener("pointerleave", () => {
+      if (!zone.classList.contains("is-drag") && !zone.classList.contains("is-spring")) resetTilt(card);
+    });
+  }
+  function resetTilt(card) {
+    ["--px", "--py", "--rx", "--ry"].forEach((p) => card.style.removeProperty(p));
+  }
+
+  // 抓起來甩：拖著走的時候有慣性，放開會像彈簧一樣彈回原位
+  function grab(el, card, allowed) {
+    let id = null, ox = 0, oy = 0, x = 0, y = 0, r = 0, vx = 0, vy = 0;
+    let lx = 0, ly = 0, lt = 0, moved = false, endedAt = -1e9, raf = 0;
+
+    const paint = () => {
+      el.style.setProperty("--dx", x.toFixed(1) + "px");
+      el.style.setProperty("--dy", y.toFixed(1) + "px");
+      el.style.setProperty("--dr", r.toFixed(2) + "deg");
+      card.style.setProperty("--ry", clamp(vx * 0.018, -28, 28).toFixed(2) + "deg");
+      card.style.setProperty("--rx", clamp(-vy * 0.018, -28, 28).toFixed(2) + "deg");
+      card.style.setProperty("--px", clamp(50 + x * 0.12, 0, 100).toFixed(1));
+      card.style.setProperty("--py", clamp(50 + y * 0.12, 0, 100).toFixed(1));
+    };
+    const rest = () => {
+      x = y = r = vx = vy = 0;
+      ["--dx", "--dy", "--dr"].forEach((p) => el.style.removeProperty(p));
+      resetTilt(card);
+      el.classList.remove("is-spring");
+    };
+    const spring = () => {
+      let last = performance.now();
+      const step = (now) => {
+        // 用很小的時間格慢慢算，畫面再卡，彈回來的速度也一樣
+        let left = Math.min(0.1, (now - last) / 1000);
+        last = now;
+        while (left > 0) {
+          const dt = Math.min(0.008, left);
+          left -= dt;
+          vx += (-190 * x - 13 * vx) * dt;
+          vy += (-190 * y - 13 * vy) * dt;
+          x += vx * dt;
+          y += vy * dt;
+          r += (clamp(vx * 0.012, -16, 16) - r) * Math.min(1, dt * 12);
+        }
+        if (Math.abs(x) < 0.4 && Math.abs(y) < 0.4 && Math.hypot(vx, vy) < 8) { rest(); return; }
+        paint();
+        raf = requestAnimationFrame(step);
+      };
+      el.classList.add("is-spring");
+      raf = requestAnimationFrame(step);
+    };
+
+    el.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (allowed && !allowed()) return;
+      id = e.pointerId;
+      ox = e.clientX - x;
+      oy = e.clientY - y;
+      lx = e.clientX; ly = e.clientY; lt = performance.now();
+      moved = false;
+    });
+    el.addEventListener("pointermove", (e) => {
+      if (e.pointerId !== id) return;
+      const nx = e.clientX - ox, ny = e.clientY - oy;
+      if (!moved) {
+        if (Math.hypot(nx - x, ny - y) < 8) return;
+        moved = true;
+        cancelAnimationFrame(raf);
+        el.classList.remove("is-spring");
+        el.classList.add("is-drag");
+        try { el.setPointerCapture(id); } catch (err) { /* 沒關係 */ }
+      }
+      const now = performance.now(), dt = Math.max(1, now - lt);
+      vx = 0.7 * vx + 0.3 * ((e.clientX - lx) / dt) * 1000;
+      vy = 0.7 * vy + 0.3 * ((e.clientY - ly) / dt) * 1000;
+      lx = e.clientX; ly = e.clientY; lt = now;
+      x = nx; y = ny;
+      r = clamp(vx * 0.012, -16, 16);
+      paint();
+    });
+    const end = (e) => {
+      if (e.pointerId !== id) return;
+      id = null;
+      if (!moved) return;
+      endedAt = performance.now();
+      el.classList.remove("is-drag");
+      if (performance.now() - lt > 90) { vx = 0; vy = 0; }
+      vx = clamp(vx, -3200, 3200);
+      vy = clamp(vy, -3200, 3200);
+      if (calm) rest(); else spring();
+    };
+    el.addEventListener("pointerup", end);
+    el.addEventListener("pointercancel", end);
+    // 剛剛是在拖卡片，就不要當成點擊（不然會直接換頁）
+    el.addEventListener("click", (e) => {
+      if (performance.now() - endedAt < 350) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
+    el.addEventListener("dragstart", (e) => e.preventDefault());
+  }
+
+  /* ---------- 自動抓 GitHub 上的最新版本 ---------- */
+
+  const GH_KEEP = 30 * 60 * 1000;   // 抓過一次後，30 分鐘內不重抓
+
+  const fmtSize = (bytes) => {
+    const mb = bytes / 1e6;
+    if (!(mb > 0)) return "";
+    if (mb >= 1000) return (mb / 1000).toFixed(1) + " GB";
+    return (mb >= 10 ? Math.round(mb) : Math.round(mb * 10) / 10) + " MB";
+  };
+  // 從 Release 的說明裡挑出「改了什麼」的條列（跳過下載、安裝那幾段）
+  const parseNotes = (body) => {
+    const out = [];
+    let skip = false;
+    String(body || "").replace(/\r/g, "").split("\n").forEach((line) => {
+      const head = /^#{1,6}\s+(.*)$/.exec(line);
+      if (head) { skip = /下載|安裝|download|install|sha/i.test(head[1]); return; }
+      const item = /^[-*]\s+(.*)$/.exec(line);
+      if (item && !skip && out.length < 12) {
+        out.push(item[1].replace(/\*\*|`/g, "").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").trim());
+      }
+    });
+    return out;
+  };
+  const fromReleases = (json) => (Array.isArray(json) ? json : [])
+    .filter((r) => r && !r.draft && !r.prerelease && r.tag_name)
+    .map((r) => {
+      const file = (r.assets || []).find((a) => !/\.(sha256|sha512|sig|asc|txt|json|ya?ml)$/i.test(a.name));
+      const d = new Date(r.published_at);
+      const two = (n) => String(n).padStart(2, "0");
+      return {
+        version: String(r.tag_name).replace(/^v/i, ""),
+        date: isNaN(d) ? "" : d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate()),
+        size: file ? fmtSize(file.size) : "",
+        url: file ? file.browser_download_url : r.html_url,
+        notes: parseNotes(r.body)
+      };
+    });
+  // GitHub 的版本清單 + data.js 裡自己寫的說明，合在一起
+  const applyReleases = (w, rel) => {
+    if (!w._own) w._own = list(w.versions);
+    const own = {};
+    w._own.forEach((v) => { own[String(v.version)] = v; });
+    w.versions = rel.map((r) => {
+      const mine = own[r.version] || {};
+      return {
+        version: r.version,
+        date: mine.date || r.date,
+        size: r.size || mine.size,
+        url: r.url,
+        notes: list(mine.notes).length ? mine.notes : r.notes,
+        notes_en: mine.notes_en
+      };
+    });
+  };
+  const ghRead = (repo) => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem("gh:" + repo) || "null");
+      return saved && Date.now() - saved.at < GH_KEEP ? saved.rel : null;
+    } catch (e) { return null; }
+  };
+  const ghSave = (repo, rel) => {
+    try { sessionStorage.setItem("gh:" + repo, JSON.stringify({ at: Date.now(), rel: rel })); } catch (e) { /* 沒關係 */ }
+  };
+
+  function loadReleases(done) {
+    const jobs = [];
+    works.forEach((w) => {
+      const repo = String(w.github || "").trim();
+      if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return;
+      const saved = ghRead(repo);
+      if (saved) { applyReleases(w, saved); return; }
+      jobs.push(
+        fetch("https://api.github.com/repos/" + repo + "/releases?per_page=20", { headers: { Accept: "application/vnd.github+json" } })
+          .then((res) => (res.ok ? res.json() : Promise.reject(new Error("GitHub " + res.status))))
+          .then((json) => {
+            const rel = fromReleases(json);
+            if (!rel.length) return false;
+            ghSave(repo, rel);
+            applyReleases(w, rel);
+            return true;
+          })
+          .catch(() => false)   // 連不上就用 data.js 裡寫的版本
+      );
+    });
+    if (jobs.length) Promise.all(jobs).then((got) => { if (got.some(Boolean)) done(); });
+  }
+
+  /* ---------- 小提示 ---------- */
+
+  let toastTimer = 0;
+  function toast(msg) {
+    let el = $("#toast");
+    if (!el) {
+      el = document.createElement("p");
+      el.id = "toast";
+      el.className = "toast";
+      el.setAttribute("role", "status");
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    void el.offsetWidth;
+    el.classList.add("is-on");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove("is-on"), 3200);
+  }
+
+  /* ============================================================
+     首頁
+     ============================================================ */
+
+  const H = { slots: [], chars: [], active: -1, busy: false, push: 60, last: -1, filter: "", fontSize: 0 };
+
+  function renderHome(first) {
+    const hand = $("#hand"), nameEl = $("#name");
+    const name = String(SITE.name || "");
+    document.title = name ? t("siteTitle", { name: name }) : t("allWorks");
+
+    nameEl.innerHTML =
+      '<span class="sr">' + esc(name) + "</span>" +
+      '<span class="hero__chars" aria-hidden="true">' +
+      Array.from(name).map((ch) => (ch === " " ? " " : '<span class="ch">' + esc(ch) + "</span>")).join("") +
+      "</span>";
+    $("#intro").textContent = tx(SITE, "intro") || "";
+
+    // 只有第一次打開才發牌；其他時候卡片一開始就擺在位置上
+    const dealing = first && shouldDeal();
+    if (!dealing) hand.classList.add("is-dealt");
+    hand.classList.add("is-static");   // 排位置的時候先不要有動畫
+
+    if (!works.length) {
+      hand.innerHTML = '<p class="none">' + t("empty") + "</p>";
+      $("#draw").hidden = true;
+    } else {
+      const mid = (works.length - 1) / 2;
+      hand.innerHTML = works.map((w, n) =>
+        '<a class="slot" href="' + esc(workUrl(w)) + '" style="--i:' + (n - mid) + ";--n:" + n + '" draggable="false">' +
+        cardHTML(w, n) + "</a>"
+      ).join("");
+    }
+
+    hand.classList.toggle("is-few", works.length > 0 && works.length <= 3);
+    H.slots = $$(".slot", hand);
+    H.chars = $$(".ch", nameEl);
+    H.active = -1;
+    H.slots.forEach(bindSlot);
+
+    renderChips();
+    renderRows();
+    renderAbout();
+
+    // 一開始的光，用中間那張卡的顏色
+    if (works.length) $("#top").style.setProperty("--c", colorOf(works[Math.floor((works.length - 1) / 2)]));
+
+    // 不是第一次來：卡片先疊在中間，再攤開
+    const fanOut = first && !dealing && !calm && wide.matches;
+    if (fanOut) hand.classList.add("is-closed");
+
+    fitName();
+    layoutHand();
+    void hand.offsetWidth;
+    hand.classList.remove("is-static");
+    if (dealing) deal();
+    if (fanOut) {
+      const open = () => hand.classList.remove("is-closed");
+      requestAnimationFrame(() => requestAnimationFrame(open));
+      setTimeout(open, 300);   // 保險：畫面更新被瀏覽器暫停時，還是會攤開
+    }
+    showHint();
+    if (!wide.matches) onHandScroll();
+  }
+
+  function renderChips() {
+    const seen = new Map();
+    works.forEach((w) => {
+      const key = String(w.type || "");
+      if (key && !seen.has(key)) seen.set(key, tx(w, "type"));
+    });
+    const chips = $("#chips");
+    if (seen.size < 2) { chips.innerHTML = ""; return; }
+    const chip = (key, label) =>
+      '<button class="chip" type="button" data-type="' + esc(key) + '" aria-pressed="' + (H.filter === key) + '">' +
+      esc(label) + "</button>";
+    chips.innerHTML = chip("", t("all")) + Array.from(seen).map((p) => chip(p[0], p[1])).join("");
+  }
+
+  function renderRows() {
+    $("#rows").innerHTML = works.map((w) => {
+      const c = colorOf(w), v = latest(w), title = tx(w, "title") || "";
+      return (
+        '<li class="row" data-type="' + esc(w.type || "") + '" style="--c:' + c + ";--on-c:" + onColor(c) + '"' +
+          (H.filter && H.filter !== String(w.type || "") ? " hidden" : "") + ">" +
+          '<a class="row__link" href="' + esc(workUrl(w)) + '">' + esc(title) + "</a>" +
+          '<span class="row__type">' + esc(tx(w, "type") || "") + "</span>" +
+          '<span class="row__sum">' + esc(tx(w, "summary") || "") + "</span>" +
+          '<span class="row__ver">' +
+            (v ? '<span class="num">v' + esc(v.version) + "</span>" + (v.date ? "<time>" + esc(fmtDate(v.date)) + "</time>" : "")
+               : esc(t("notOut"))) +
+          "</span>" +
+          (v ? '<a class="row__dl" ' + dlAttrs(v.url) + ' aria-label="' + esc(t("download") + " " + title + " v" + v.version) + '">' +
+               esc(t("download")) + "</a>" : "<span></span>") +
+        "</li>"
+      );
+    }).join("");
+  }
+
+  function renderAbout() {
+    const links = list(SITE.links).filter((l) => l && l.label);
+    $("#aboutText").innerHTML =
+      list(tx(SITE, "about")).map((p) => "<p>" + esc(p) + "</p>").join("") +
+      (links.length
+        ? '<ul class="links">' + links.map((l) => {
+            const u = hasLink(l.url) ? safeUrl(l.url) : "";
+            return '<li><a href="' + esc(u || "#") + '"' + (isOutside(u) ? ' target="_blank" rel="noopener"' : "") + ">" +
+              esc(l.label) + "</a></li>";
+          }).join("") + "</ul>"
+        : "");
+  }
+
+  // 名字放到最大：剛好塞滿寬度，但不要高到把卡片擠出畫面
+  function fitName() {
+    const el = $("#name"), inner = $(".hero__chars", el);
+    if (!inner || !inner.textContent) return;
+    H.chars.forEach((ch) => { ch.style.fontWeight = ""; });
+    el.style.fontSize = "200px";
+    const w = inner.getBoundingClientRect().width;
+    if (!w) return;
+    const fit = (200 * el.clientWidth) / w * 0.99;
+    H.fontSize = Math.max(48, Math.min(fit, wide.matches ? innerHeight * 0.36 : 1e4, 440));
+    el.style.fontSize = H.fontSize.toFixed(1) + "px";
+  }
+
+  // 算出一手牌要攤多開
+  function layoutHand() {
+    const hand = $("#hand"), n = H.slots.length;
+    if (!n) return;
+    if (!wide.matches) {
+      ["--spread", "--angle", "--drop"].forEach((p) => hand.style.removeProperty(p));
+      return;
+    }
+    const W = hand.clientWidth, w = H.slots[0].offsetWidth, half = (n - 1) / 2;
+    const few = n <= 3;   // 作品少的時候，卡片大一點、攤開一點
+    hand.style.setProperty("--spread", (n > 1 ? Math.min(w * (few ? 0.94 : 0.8), (W - w) / (n - 1)) : 0).toFixed(1) + "px");
+    hand.style.setProperty("--angle", (n > 1 ? Math.min(few ? 10 : 7, 40 / (n - 1)) : 0).toFixed(2) + "deg");
+    hand.style.setProperty("--drop", (half > 0 ? Math.min(10, 46 / (half * half)) : 0).toFixed(2) + "px");
+    H.push = Math.min(w * 0.3, 80);
+  }
+
+  // 第一次打開：從下面發牌。之後再回首頁就直接擺好
+  function shouldDeal() {
+    let seen = false;
+    try { seen = sessionStorage.getItem("dealt") === "1"; sessionStorage.setItem("dealt", "1"); } catch (e) { /* 沒關係 */ }
+    return !calm && !seen && wide.matches;
+  }
+  function deal() {
+    const hand = $("#hand");
+    hand.classList.add("is-dealing");
+    let started = false;
+    const start = () => {
+      if (started) return;
+      started = true;
+      hand.classList.add("is-dealt");
+      setTimeout(() => hand.classList.remove("is-dealing"), 1000 + H.slots.length * 80);
+    };
+    requestAnimationFrame(() => requestAnimationFrame(start));
+    setTimeout(start, 300);   // 保險：畫面更新被瀏覽器暫停時，還是會發牌
+  }
+
+  function bindSlot(slot, k) {
+    const card = slot.firstElementChild;
+    slot.addEventListener("pointerenter", (e) => {
+      if (e.pointerType === "touch" || H.busy || !wide.matches) return;
+      activate(k);
+    });
+    slot.addEventListener("pointerleave", () => {
+      if (!wide.matches || slot.classList.contains("is-drag")) return;
+      if (H.active === k) deactivate();
+    });
+    slot.addEventListener("focus", () => { if (slot.matches(":focus-visible")) activate(k); });
+    slot.addEventListener("blur", () => { if (wide.matches && H.active === k && !slot.matches(":hover")) deactivate(); });
+    // 點下去：其他卡掉下去，這張飛到中間，再換到作品頁
+    slot.addEventListener("click", (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (!wide.matches || calm) return;
+      e.preventDefault();
+      if (H.busy) return;
+      H.busy = true;
+      activate(k, true);
+      slot.classList.add("is-chosen");
+      $("#hand").classList.add("is-leaving");
+      setTimeout(() => { location.href = slot.href; }, 430);
+    });
+    tilt(slot, card);
+    grab(slot, card, () => wide.matches && !H.busy);
+  }
+
+  // 選到一張卡：旁邊的卡讓開、整個畫面的光換成它的顏色、下面顯示它的名字
+  function activate(k, pick) {
+    const w = works[k];
+    if (!w) return;
+    H.active = k;
+    H.slots.forEach((s, j) => {
+      s.classList.toggle("is-picked", !!pick && j === k);
+      if (wide.matches) s.style.setProperty("--push", j === k ? "0px" : (j < k ? -H.push : H.push) + "px");
+    });
+    $("#top").style.setProperty("--c", colorOf(w));
+    $("#cap").innerHTML = "<b>" + esc(tx(w, "title") || "") + "</b>" + esc(tx(w, "summary") || "");
+  }
+  function deactivate() {
+    H.active = -1;
+    H.slots.forEach((s) => { s.style.removeProperty("--push"); s.classList.remove("is-picked"); });
+    showHint();
+  }
+  function showHint() {
+    if (!works.length) { $("#cap").textContent = ""; return; }
+    if (wide.matches) $("#cap").textContent = fine ? t("hintMouse") : t("hintTap");
+  }
+
+  // 手機：左右滑的時候，中間那張卡就是「選到的」
+  function onHandScroll() {
+    if (wide.matches || !H.slots.length) return;
+    const hand = $("#hand"), box = hand.getBoundingClientRect(), mid = box.left + box.width / 2;
+    let best = 0, bestD = Infinity;
+    H.slots.forEach((s, k) => {
+      const r = s.getBoundingClientRect(), c = r.left + r.width / 2, d = Math.abs(c - mid);
+      if (d < bestD) { bestD = d; best = k; }
+      s.firstElementChild.style.setProperty("--px", clamp(50 + ((c - mid) / box.width) * 130, 0, 100).toFixed(1));
+    });
+    H.slots.forEach((s, k) => s.classList.toggle("is-center", k === best));
+    if (best !== H.active) activate(best);
+  }
+
+  // 隨機抽一張：收牌、洗牌、翻開
+  function draw() {
+    const n = H.slots.length;
+    if (H.busy || !n) return;
+    let k = Math.floor(Math.random() * n);
+    if (n > 1 && k === H.last) k = (k + 1) % n;
+    H.last = k;
+    const hand = $("#hand"), btn = $("#draw"), slot = H.slots[k];
+
+    if (!wide.matches) {
+      slot.scrollIntoView({ behavior: calm ? "auto" : "smooth", inline: "center", block: "nearest" });
+      slot.classList.add("is-pop");
+      setTimeout(() => slot.classList.remove("is-pop"), 600);
+      return;
+    }
+    if (calm) { activate(k, true); slot.focus({ preventScroll: true }); return; }
+
+    H.busy = true;
+    btn.disabled = true;
+    deactivate();
+    hand.classList.add("is-stack", "is-gather");
+    setTimeout(() => { hand.classList.add("is-backs"); hand.classList.remove("is-gather"); }, 560);
+    for (let j = 0; j < 3; j++) {
+      setTimeout(() => H.slots.forEach((s, i) => {
+        const side = (i + j) % 2 ? 1 : -1;
+        s.style.setProperty("--jx", (side * (44 + Math.random() * 50)).toFixed(0) + "px");
+        s.style.setProperty("--jr", (side * (4 + Math.random() * 7)).toFixed(1) + "deg");
+      }), 620 + j * 230);
+      setTimeout(() => H.slots.forEach((s) => {
+        s.style.removeProperty("--jx");
+        s.style.removeProperty("--jr");
+      }), 620 + j * 230 + 115);
+    }
+    setTimeout(() => {
+      hand.classList.add("is-reveal");
+      hand.classList.remove("is-stack", "is-backs");
+      activate(k, true);
+      slot.focus({ preventScroll: true });
+    }, 1340);
+    setTimeout(() => {
+      hand.classList.remove("is-reveal");
+      H.busy = false;
+      btn.disabled = false;
+    }, 1340 + 760 + n * 60);
+  }
+
+  // 只要綁一次的事件
+  function initHome() {
+    const hero = $("#top"), hand = $("#hand");
+
+    $("#draw").addEventListener("click", draw);
+
+    $("#chips").addEventListener("click", (e) => {
+      const b = e.target.closest(".chip");
+      if (!b) return;
+      H.filter = b.dataset.type;
+      $$(".chip").forEach((c) => c.setAttribute("aria-pressed", String(c === b)));
+      $$(".row").forEach((r) => { r.hidden = !!H.filter && r.dataset.type !== H.filter; });
+    });
+
+    let scrollTick = false;
+    hand.addEventListener("scroll", () => {
+      if (scrollTick) return;
+      scrollTick = true;
+      requestAnimationFrame(() => { scrollTick = false; onHandScroll(); });
+    }, { passive: true });
+
+    // ← → 鍵切換卡片
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || H.busy) return;
+      const el = document.activeElement;
+      if (el && el.closest("input, textarea, select, [contenteditable]")) return;
+      const n = H.slots.length;
+      if (!n || hero.getBoundingClientRect().bottom < innerHeight * 0.35) return;
+      const at = H.slots.indexOf(el) >= 0 ? H.slots.indexOf(el) : H.active;
+      const dir = e.key === "ArrowRight" ? 1 : -1;
+      const next = at < 0 ? (dir > 0 ? 0 : n - 1) : (at + dir + n) % n;
+      e.preventDefault();
+      H.slots[next].focus({ preventScroll: wide.matches });
+      activate(next, true);
+    });
+
+    // 游標：光跟著走，名字的字被推得變細
+    if (fine && !calm) {
+      let mx = 0, my = 0, tick = false;
+      const update = () => {
+        tick = false;
+        const box = hero.getBoundingClientRect();
+        hero.style.setProperty("--mx", (mx - box.left).toFixed(0) + "px");
+        hero.style.setProperty("--my", (my - box.top).toFixed(0) + "px");
+        const reach = H.fontSize * 1.05;
+        H.chars.forEach((ch) => {
+          const r = ch.getBoundingClientRect();
+          const d = Math.hypot(mx - (r.left + r.width / 2), my - (r.top + r.height / 2));
+          const f = Math.max(0, 1 - d / reach);
+          ch.style.fontWeight = String(Math.round(900 - 660 * f * f));
+        });
+      };
+      hero.addEventListener("pointermove", (e) => {
+        if (e.pointerType === "touch") return;
+        mx = e.clientX; my = e.clientY;
+        if (!tick) { tick = true; requestAnimationFrame(update); }
+      });
+      hero.addEventListener("pointerleave", () => {
+        H.chars.forEach((ch) => { ch.style.fontWeight = ""; });
+        hero.style.removeProperty("--mx");
+        hero.style.removeProperty("--my");
+      });
+    }
+
+    let resizeTimer = 0;
+    addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => { fitName(); layoutHand(); onHandScroll(); }, 80);
+    });
+    wide.addEventListener("change", () => render(false));
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => { fitName(); layoutHand(); });
+    }
+  }
+
+  /* ============================================================
+     作品頁
+     ============================================================ */
+
+  function renderWork(first) {
+    const app = $("#app");
+    app.classList.toggle("is-enter", !!first);
+    const id = new URLSearchParams(location.search).get("id");
+    const index = works.findIndex((w) => String(w.id) === String(id));
+    $("#home").textContent = SITE.name || "Home";
+
+    if (index < 0) {
+      document.title = t("nfTitle");
+      app.innerHTML =
+        '<section class="none"><h1>' + t("nfTitle") + "</h1><p>" + t("nfBody") + "</p>" +
+        '<p><a href="index.html#works">' + t("nfLink") + "</a></p></section>";
+      return;
+    }
+
+    const w = works[index], c = colorOf(w), v = latest(w);
+    const title = tx(w, "title") || "";
+    document.title = title + (SITE.name ? " | " + SITE.name : "");
+    document.documentElement.style.setProperty("--c", c);
+    document.documentElement.style.setProperty("--on-c", onColor(c));
+
+    const repo = /^[\w.-]+\/[\w.-]+$/.test(String(w.github || "")) ? String(w.github) : "";
+    const kind = [tx(w, "type"), tx(w, "platform")].filter(Boolean).map(esc).join(t("sep"));
+    const meta = v
+      ? [v.size, v.date ? t("updated", { date: fmtDate(v.date) }) : ""].filter(Boolean).map(esc).join(t("sep"))
+      : "";
+
+    const block = (head, body, cls) =>
+      '<div class="block"><h2>' + head + '</h2><div class="block__body' + (cls ? " " + cls : "") + '">' + body + "</div></div>";
+
+    const desc = list(tx(w, "description"));
+    const feats = list(tx(w, "features"));
+    const shots = list(w.screenshots).map(safeUrl).filter(Boolean);
+    const steps = list(tx(w, "install"));
+    const vers = list(w.versions);
+    const others = works.map((o, i) => ({ o: o, i: i })).filter((x) => x.i !== index);
+
+    app.innerHTML =
+      '<section class="work">' +
+        '<div class="work__card"><div class="solo" id="solo" aria-hidden="true">' + cardHTML(w, index) + "</div></div>" +
+        '<div class="work__info">' +
+          (kind ? '<p class="work__kind">' + kind + "</p>" : "") +
+          "<h1>" + esc(title) + "</h1>" +
+          '<p class="work__sum">' + esc(tx(w, "summary") || "") + "</p>" +
+          (v
+            ? '<div class="dl"><a class="dl__btn" ' + dlAttrs(v.url) + ">" + esc(t("download")) +
+              ' <span class="num">v' + esc(v.version) + "</span></a>" +
+              (meta ? '<p class="dl__meta">' + meta + "</p>" : "") + "</div>"
+            : '<p class="dl__none">' + t("noVersion") + "</p>") +
+          (repo ? '<p class="work__src"><a href="https://github.com/' + esc(repo) + '" target="_blank" rel="noopener">' +
+            t("source") + "</a></p>" : "") +
+        "</div>" +
+      "</section>" +
+
+      '<section class="blocks">' +
+        (desc.length ? block(t("secIntro"), desc.map((p) => "<p>" + esc(p) + "</p>").join("")) : "") +
+        (feats.length ? block(t("secFeat"), '<ul class="feat">' + feats.map((f) => "<li>" + esc(f) + "</li>").join("") + "</ul>") : "") +
+        (shots.length ? block(t("secShots"), '<div class="shots">' + shots.map((s, n) =>
+          '<a href="' + esc(s) + '" target="_blank" rel="noopener"><img src="' + esc(s) + '" loading="lazy" alt="' +
+          esc(t("shot", { title: title, n: n + 1 })) + '"></a>').join("") + "</div>", "block__body--wide") : "") +
+        (steps.length ? block(t("secInstall"), '<ol class="steps">' + steps.map((s) => "<li><span>" + esc(s) + "</span></li>").join("") + "</ol>") : "") +
+        (vers.length ? block(t("secHistory"), '<ul class="vers">' + vers.map((x, n) =>
+          '<li class="ver"><div class="ver__head"><span class="num">v' + esc(x.version) + "</span>" +
+          (n === 0 ? '<span class="ver__tag">' + t("latest") + "</span>" : "") +
+          (x.date ? "<time>" + esc(fmtDate(x.date)) + "</time>" : "") +
+          '<a class="ver__dl" ' + dlAttrs(x.url) + ">" + t("dlThis") + "</a></div>" +
+          (list(tx(x, "notes")).length
+            ? '<ul class="ver__notes">' + list(tx(x, "notes")).map((s) => "<li>" + esc(s) + "</li>").join("") + "</ul>"
+            : "") +
+          "</li>").join("") + "</ul>") : "") +
+      "</section>" +
+
+      (others.length
+        ? '<section class="more"><h2>' + t("more") + '</h2><div class="more__row">' +
+          others.map((x) => '<a href="' + esc(workUrl(x.o)) + '">' + cardHTML(x.o, x.i) + "</a>").join("") +
+          "</div></section>"
+        : "");
+
+    const solo = $("#solo");
+    tilt(solo, solo.firstElementChild);
+    grab(solo, solo.firstElementChild);
+  }
+
+  /* ============================================================
+     開始
+     ============================================================ */
+
+  function render(first) {
+    document.documentElement.lang = lang === "zh" ? "zh-Hant" : "en";
+    $$("[data-t]").forEach((el) => { el.textContent = t(el.dataset.t); });
+    const lb = $("#lang");
+    if (lb) { lb.textContent = t("langBtn"); lb.lang = lang === "zh" ? "en" : "zh-Hant"; }
+    const demo = $("#demo");
+    if (demo) { demo.hidden = !SITE.demo; demo.textContent = t("demo"); }
+    const foot = $("#foot");
+    if (foot) {
+      foot.innerHTML = "<span>© " + new Date().getFullYear() + " " + esc(SITE.name || "") + "</span>" +
+        '<a href="#top">' + t("backTop") + "</a>";
+    }
+    if (page === "home") renderHome(first);
+    else if (page === "work") renderWork(first);
+  }
+
+  const langBtn = $("#lang");
+  if (langBtn) {
+    langBtn.addEventListener("click", () => {
+      lang = lang === "zh" ? "en" : "zh";
+      try { localStorage.setItem("lang", lang); } catch (e) { /* 沒關係 */ }
+      render(false);
+    });
+  }
+
+  // 還沒放下載連結的按鈕：按了會出現提示，不會亂跳
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("[data-nolink]");
+    if (!a) return;
+    e.preventDefault();
+    toast(SITE.demo ? t("toastDemo") : t("toastNone"));
+  });
+
+  // 按「上一頁」回到首頁時，把剛剛掉下去的卡片擺回來
+  addEventListener("pageshow", (e) => {
+    if (!e.persisted || page !== "home") return;
+    H.busy = false;
+    $("#hand").classList.remove("is-leaving");
+    H.slots.forEach((s) => s.classList.remove("is-chosen"));
+    deactivate();
+  });
+
+  // 抓到 GitHub 上的新版本之後，把畫面上的版本號和下載連結換掉
+  function showNewVersions() {
+    if (page === "work") { renderWork(false); return; }
+    if (page !== "home") return;
+    H.slots.forEach((slot, k) => {
+      const v = latest(works[k]), top = $(".card__top", slot);
+      if (!v || !top) return;
+      let num = $(".num", top);
+      if (!num) { num = document.createElement("span"); num.className = "num"; top.appendChild(num); }
+      num.textContent = "v" + v.version;
+    });
+    renderRows();
+  }
+
+  if (page === "home") initHome();
+  loadReleases(showNewVersions);
+  render(true);
+})();
