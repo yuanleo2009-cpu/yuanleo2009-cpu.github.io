@@ -27,6 +27,7 @@
       langBtn: "English",
       hintMouse: "點卡片看介紹和下載。也可以抓起來甩，或用 ← → 鍵切換",
       hintTap: "點卡片看介紹和下載",
+      hintSwipe: "左右滑看其他作品，點卡片看介紹和下載",
       draw: "隨機抽一張",
       allWorks: "全部作品",
       all: "全部",
@@ -62,6 +63,7 @@
       langBtn: "中文",
       hintMouse: "Click a card to see more and download. You can also grab and throw it, or use the ← → keys",
       hintTap: "Tap a card to see more and download",
+      hintSwipe: "Swipe to see more. Tap a card to open it.",
       draw: "Pick a random one",
       allWorks: "All works",
       all: "All",
@@ -651,7 +653,12 @@
       if (wide.matches) s.style.setProperty("--push", j === k ? "0px" : (j < k ? -H.push : H.push) + "px");
     });
     $("#top").style.setProperty("--c", colorOf(w));
-    $("#cap").innerHTML = "<b>" + esc(tx(w, "title") || "") + "</b>" + esc(tx(w, "summary") || "");
+    if (wide.matches) {
+      $("#cap").innerHTML = "<b>" + esc(tx(w, "title") || "") + "</b>" + esc(tx(w, "summary") || "");
+    } else {
+      // 手機：名字和介紹卡片上就有了，下面只要把「現在是第幾張」的圓點亮起來
+      $$(".dots i").forEach((d, j) => d.classList.toggle("is-on", j === k));
+    }
   }
   function deactivate() {
     H.active = -1;
@@ -659,8 +666,17 @@
     showHint();
   }
   function showHint() {
-    if (!works.length) { $("#cap").textContent = ""; return; }
-    if (wide.matches) $("#cap").textContent = fine ? t("hintMouse") : t("hintTap");
+    const cap = $("#cap");
+    if (!works.length) { cap.textContent = ""; return; }
+    if (wide.matches) { cap.textContent = fine ? t("hintMouse") : t("hintTap"); return; }
+    // 手機：一排小圓點（每個作品一顆）加一句操作提示
+    const many = works.length > 1;
+    cap.innerHTML =
+      (many
+        ? '<span class="dots" aria-hidden="true">' + works.map((w, k) =>
+            '<i style="--c:' + colorOf(w) + '"' + (k === H.active ? ' class="is-on"' : "") + "></i>").join("") + "</span>"
+        : "") +
+      esc(many ? t("hintSwipe") : t("hintTap"));
   }
 
   // 手機：左右滑的時候，中間那張卡就是「選到的」
@@ -681,8 +697,11 @@
   function draw() {
     const n = H.slots.length;
     if (H.busy || !n) return;
+    // 不要抽到同一張：電腦上避開上次抽到的，手機上避開現在正中間那張
+    if (!wide.matches) onHandScroll();   // 先確定現在正中間是哪一張
+    const avoid = wide.matches ? H.last : H.active;
     let k = Math.floor(Math.random() * n);
-    if (n > 1 && k === H.last) k = (k + 1) % n;
+    if (n > 1 && k === avoid) k = (k + 1 + Math.floor(Math.random() * (n - 1))) % n;
     H.last = k;
     const hand = $("#hand"), btn = $("#draw"), slot = H.slots[k];
 
@@ -794,9 +813,13 @@
       resizeTimer = setTimeout(() => { fitName(); layoutHand(); onHandScroll(); }, 80);
     });
     wide.addEventListener("change", () => render(false));
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(() => { fitName(); layoutHand(); });
+    // 字型載入好之後，名字的大小要重算。每種瀏覽器通知的時間不太一樣，所以多聽幾種
+    const refit = () => { fitName(); layoutHand(); };
+    if (document.fonts) {
+      if (document.fonts.ready) document.fonts.ready.then(refit);
+      if (document.fonts.addEventListener) document.fonts.addEventListener("loadingdone", refit);
     }
+    addEventListener("load", refit);
   }
 
   /* ============================================================
@@ -925,11 +948,17 @@
 
   // 按「上一頁」回到首頁時，把剛剛掉下去的卡片擺回來
   addEventListener("pageshow", (e) => {
-    if (!e.persisted || page !== "home") return;
+    if (!e.persisted) return;
+    // 在另一頁換過語言的話，這一頁也跟著換
+    let saved = lang;
+    try { saved = localStorage.getItem("lang") || lang; } catch (err) { /* 沒關係 */ }
+    if ((saved === "zh" || saved === "en") && saved !== lang) { lang = saved; render(false); }
+    if (page !== "home") return;
     H.busy = false;
     $("#hand").classList.remove("is-leaving");
     H.slots.forEach((s) => s.classList.remove("is-chosen"));
     deactivate();
+    if (!wide.matches) onHandScroll();
   });
 
   // 抓到 GitHub 上的新版本之後，把畫面上的版本號和下載連結換掉

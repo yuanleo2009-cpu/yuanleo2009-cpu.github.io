@@ -93,7 +93,15 @@ main h2 {
   padding: 3px 14px;
   cursor: pointer;
 }
-.lang:hover { border-color: var(--ink); }
+@media (hover: hover) { .lang:hover { border-color: var(--ink); } }
+
+/* 手指比較好點：把可以點的範圍加大一圈，外觀不變 */
+.top a, .lang, .foot a, .ver__dl, .work__src a { position: relative; }
+.top a::after, .lang::after, .foot a::after, .ver__dl::after, .work__src a::after {
+  content: "";
+  position: absolute;
+  inset: -10px -6px;
+}
 
 /* ---------- 首頁第一個畫面 ---------- */
 
@@ -145,6 +153,17 @@ main h2 {
 }
 .hero__cap b { margin-right: .7em; font-weight: 900; color: var(--c); }
 
+/* 手機上的小圓點：每個作品一顆，現在看到的那顆會變長、變成它的顏色 */
+.dots { display: flex; justify-content: center; gap: 8px; margin-bottom: 10px; }
+.dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / .3);
+  transition: width .3s var(--ease), background-color .3s;
+}
+.dots i.is-on { width: 26px; background: var(--c); }
+
 .hero__foot {
   display: flex;
   justify-content: space-between;
@@ -167,7 +186,9 @@ main h2 {
   cursor: pointer;
   transition: background-color .2s, color .2s;
 }
-.draw:hover { background: var(--ink); color: #000; }
+/* 滑鼠移上去才變色。觸控螢幕點完不會一直卡在變色的樣子 */
+@media (hover: hover) { .draw:hover { background: var(--ink); color: #000; } }
+.draw:active { background: var(--ink); color: #000; }
 .draw:disabled { opacity: .45; cursor: default; }
 
 /* ---------- 卡片 ---------- */
@@ -367,15 +388,16 @@ main h2 {
 
 /* 寬螢幕：卡片攤成一手牌 */
 @media (min-width: 721px) {
+  /* 卡片大小看螢幕寬度；螢幕很矮的時候（手機橫拿）再縮小一點，才不會被切掉 */
   .hand {
-    --w: clamp(170px, 16.5vw, 244px);
+    --w: min(clamp(170px, 16.5vw, 244px), max(120px, 40svh));
     position: relative;
     z-index: 1;
     align-self: end;
     height: calc(var(--w) * 1.4 + 100px);
     margin-top: calc(var(--w) * -.34);
   }
-  .hand.is-few { --w: clamp(200px, 20vw, 290px); }
+  .hand.is-few { --w: min(clamp(200px, 20vw, 290px), max(130px, 46svh)); }
   .slot {
     --lift: -36px;
     --grow: .07;
@@ -440,6 +462,12 @@ main h2 {
   .demo:not([hidden]) + .hero { min-height: calc(100svh - 35px); }
 }
 
+/* 平板直拿：螢幕又高又窄，卡片放大一點，放在名字和下面文字的正中間 */
+@media (min-width: 721px) and (orientation: portrait) {
+  .hand { --w: clamp(170px, 22vw, 244px); align-self: center; }
+  .hand.is-few { --w: clamp(200px, 32vw, 290px); }
+}
+
 /* 窄螢幕（手機）：卡片排成一排，左右滑 */
 @media (max-width: 720px) {
   .hero { display: block; min-height: 0; padding-bottom: 34px; }
@@ -448,7 +476,7 @@ main h2 {
     display: flex;
     gap: 14px;
     margin: 20px calc(var(--gutter) * -1) 0;
-    padding: 14px calc(50vw - var(--w) / 2) 30px;
+    padding: 14px calc(50vw - var(--w) / 2) 24px;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
@@ -456,9 +484,8 @@ main h2 {
   .hand::-webkit-scrollbar { display: none; }
   .slot { flex: none; scroll-snap-align: center; }
   .slot.is-center { --active: .85; }
-  .hero__cap { min-height: 3.5em; }
-  .hero__cap b { display: block; margin: 0; }
-  .hero__foot { flex-direction: column; align-items: start; }
+  .hero__cap { min-height: 0; margin-top: 0; font-size: 15px; line-height: 1.6; }
+  .hero__foot { flex-direction: column; align-items: start; margin-top: 22px; }
 }
 
 /* ---------- 全部作品（清單） ---------- */
@@ -485,7 +512,7 @@ main h2 {
   line-height: 1.5;
   cursor: pointer;
 }
-.chip:hover { border-color: var(--ink); }
+@media (hover: hover) { .chip:hover { border-color: var(--ink); } }
 .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #000; }
 
 .rows {
@@ -525,8 +552,10 @@ main h2 {
   transition: transform .25s var(--ease);
 }
 .row__link::after { content: ""; position: absolute; inset: 0; }
-.row:hover .row__link { color: var(--c); }
-.row:hover .row__link::before { transform: scale(1.5) rotate(45deg); }
+@media (hover: hover) {
+  .row:hover .row__link { color: var(--c); }
+  .row:hover .row__link::before { transform: scale(1.5) rotate(45deg); }
+}
 .row__type,
 .row__sum { font-size: 15px; color: var(--dim); }
 .row__sum { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -545,9 +574,12 @@ main h2 {
   text-decoration: none;
   transition: transform .15s;
 }
-.row__dl:hover { transform: scale(1.07); }
+@media (hover: hover) { .row__dl:hover { transform: scale(1.07); } }
+.row__dl:active { transform: scale(.96); }
 
 @media (max-width: 720px) {
+  .chip { padding: 8px 16px; }
+  .row__dl { padding: 9px 22px; }
   .rows { display: block; }
   .row {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -669,7 +701,7 @@ main h2 {
   transition: transform .15s, box-shadow .25s;
 }
 .dl__btn .num { font-size: .8em; font-weight: 700; }
-.dl__btn:hover { transform: translateY(-2px); box-shadow: 0 12px 44px -10px var(--c); }
+@media (hover: hover) { .dl__btn:hover { transform: translateY(-2px); box-shadow: 0 12px 44px -10px var(--c); } }
 .dl__btn:active { transform: translateY(1px); }
 .dl__meta,
 .dl__none { font-size: 15px; color: var(--dim); }
@@ -762,8 +794,8 @@ main h2 {
   text-decoration: none;
   transition: transform .3s var(--ease);
 }
-.more__row a:hover,
 .more__row a:focus-visible { --active: 1; transform: translateY(-8px) rotate(-2deg); }
+@media (hover: hover) { .more__row a:hover { --active: 1; transform: translateY(-8px) rotate(-2deg); } }
 .more__row .card__sum { display: none; }
 .more__row .card__title { font-size: 2.3em; }
 
