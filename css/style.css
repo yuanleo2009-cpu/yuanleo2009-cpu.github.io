@@ -752,6 +752,10 @@ main h2 {
 .shots a { display: block; border-radius: 10px; overflow: hidden; }
 .shots img { display: block; width: 100%; }
 
+/* 介紹影片：跟著畫面寬度縮放，固定 16:9，載入前先留好位置 */
+.video { display: block; width: 100%; max-width: 960px; height: auto; aspect-ratio: 16 / 9; border-radius: 10px; background: #0c0f14; }
+.video__note { margin-top: 10px; font-size: 15px; color: var(--dim); }
+
 .vers { gap: 30px; }
 .ver__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
 .ver__head .num { font-size: 22px; font-weight: 700; }

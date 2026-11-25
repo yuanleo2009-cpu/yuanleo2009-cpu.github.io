@@ -40,6 +40,7 @@
       notOut: "還沒發布",
       updated: "{date} 更新",
       sep: "，",
+      secVideo: "介紹影片",
       secIntro: "介紹",
       secFeat: "特色",
       secShots: "截圖",
@@ -80,6 +81,7 @@
       notOut: "Not out yet",
       updated: "updated {date}",
       sep: ", ",
+      secVideo: "Intro video",
       secIntro: "About this",
       secFeat: "Features",
       secShots: "Screenshots",
@@ -886,6 +888,10 @@
     const vers = list(w.versions);
     const others = works.map((o, i) => ({ o: o, i: i })).filter((x) => x.i !== index);
 
+    // 介紹影片（data.js 的 video）。videoPoster 是還沒播放時顯示的圖，videoNote 是影片下面的小字
+    const video = safeUrl(w.video), poster = safeUrl(w.videoPoster), videoNote = tx(w, "videoNote") || "";
+    const oldVideo = $("video.video", app);   // 重畫之前先記住正在看的影片
+
     app.innerHTML =
       '<section class="work">' +
         '<div class="work__card"><div class="solo" id="solo" data-work="' + esc(w.id) + '" aria-hidden="true">' + cardHTML(w, index) + "</div></div>" +
@@ -909,6 +915,10 @@
       "</section>" +
 
       '<section class="blocks">' +
+        (video ? block(t("secVideo"),
+          '<video class="video" controls playsinline preload="metadata" src="' + esc(video) + '"' +
+          (poster ? ' poster="' + esc(poster) + '"' : "") + "></video>" +
+          (videoNote ? '<p class="video__note">' + esc(videoNote) + "</p>" : ""), "block__body--wide") : "") +
         (desc.length ? block(t("secIntro"), desc.map((p) => "<p>" + esc(p) + "</p>").join("")) : "") +
         (feats.length ? block(t("secFeat"), '<ul class="feat">' + feats.map((f) => "<li>" + esc(f) + "</li>").join("") + "</ul>") : "") +
         (shots.length ? block(t("secShots"), '<div class="shots">' + shots.map((s, n) =>
@@ -933,6 +943,10 @@
           others.map((x) => '<a href="' + esc(workUrl(x.o)) + '" data-work="' + esc(x.o.id) + '">' + cardHTML(x.o, x.i) + "</a>").join("") +
           "</div></section>"
         : "");
+
+    // 畫面重畫（換語言、抓到新版本）的時候，同一支影片就把原本那個放回去，才不會看到一半又從頭開始
+    const newVideo = $("video.video", app);
+    if (oldVideo && newVideo && oldVideo.getAttribute("src") === newVideo.getAttribute("src")) newVideo.replaceWith(oldVideo);
 
     const solo = $("#solo");
     tilt(solo, solo.firstElementChild);
@@ -1042,6 +1056,7 @@
     if (key === shown) { scrollToPart(id, !calm); return; }
 
     if (swap) swap.end();   // 上一次的動畫還沒跑完，先收掉
+    $$("video").forEach((v) => v.pause());   // 離開這一頁就先暫停影片，不然看不到畫面還會繼續有聲音
     const prev = shown;
     shown = key;
     page = next;

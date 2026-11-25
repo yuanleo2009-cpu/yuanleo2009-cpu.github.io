@@ -10,6 +10,9 @@
   - 名字後面有 _en 的是英文版（例如 title 是中文，title_en 是英文）。
     不想寫英文的話，_en 那一行可以整行刪掉，英文版就會直接顯示中文。
   - 圖片放進 images 資料夾，然後寫 "images/檔名.png"
+  - 作品想放介紹影片的話，把 mp4 放進 videos 資料夾，然後在那個作品裡寫
+    video: "videos/檔名.mp4"（影片會出現在作品頁最上面的「介紹影片」）。
+    videoPoster 是還沒按播放時顯示的圖；不想放影片就把這幾行刪掉。
 
   出新版本的時候
   - 作品有寫 github: "帳號/專案名稱" 的話，網站會自己去 GitHub 的 Releases
@@ -196,6 +199,9 @@ window.SITE = {
       color: "#ff3d5a",
       icon: "images/riot-account-hub.png",
       cover: "",
+      video: "videos/riot-account-hub-intro.mp4",              // 介紹影片（約 30 秒）
+      videoPoster: "images/riot-account-hub-intro.jpg",        // 還沒按播放時顯示的圖
+      videoNote_en: "The text in the video is in Chinese.",    // 影片下面的小字，只有英文版會顯示
       github: "yuanleo2009-cpu/RiotAccountHub",
       platform: "Windows 10 / 11",
       summary: "VALORANT 帳號切換器。每個帳號登入一次，之後按一下就能切換並開始遊戲。",
