@@ -4,7 +4,6 @@
    ============================================================ */
 
 @property --c    { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
-@property --flip { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
 
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -350,7 +349,7 @@ main h2 {
     scale(calc(1 + var(--active, 0) * var(--grow, 0)))
     perspective(900px)
     rotateX(var(--rx, 0deg))
-    rotateY(calc(var(--ry, 0deg) + var(--flip, 0deg)));
+    rotateY(var(--ry, 0deg));
   transition: transform .45s var(--ease);
 }
 .slot:hover .card,
@@ -366,25 +365,15 @@ main h2 {
 .hand.is-static .slot,
 .hand.is-static .card { transition: none !important; }
 
-/* 翻牌 */
-@keyframes flip {
-  0%     { --flip: 0deg;   animation-timing-function: ease-in; }
-  50%    { --flip: 90deg; }
-  50.01% { --flip: -90deg; animation-timing-function: ease-out; }
-  100%   { --flip: 0deg; }
-}
-@keyframes back-on  { 0%, 50% { opacity: 0; } 50.01%, 100% { opacity: 1; } }
-@keyframes back-off { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
-@keyframes pop      { 50% { scale: 1.07; } }
+/* 隨機抽一張（洗牌）：動作本身寫在 site.js 的 draw()，這裡只是讓它跑得順。
+   洗牌的時候先把反光關掉（反光很吃效能），卡片各自一層，交給顯示卡畫 */
+.hand.is-drawing .slot { --active: 0; pointer-events: none; will-change: transform; }
+.hand.is-drawing .card { will-change: transform; }
+.hand.is-drawing .card__foil,
+.hand.is-drawing .card__glare { opacity: 0; visibility: hidden; transition: opacity .15s, visibility 0s .15s; }
 
-.hand.is-gather .card,
-.hand.is-reveal .card { transition: none; }
-.hand.is-gather .card       { animation: flip .5s both; }
-.hand.is-gather .card__back { animation: back-on .5s both; }
-.hand.is-backs  .card__back { opacity: 1; }
-.hand.is-reveal .card       { animation: flip .7s both; animation-delay: calc(var(--n) * 60ms); }
-.hand.is-reveal .card__back { animation: back-off .7s both; animation-delay: calc(var(--n) * 60ms); }
-.slot.is-pop .card          { animation: pop .5s var(--ease); }
+@keyframes pop { 50% { scale: 1.07; } }
+.slot.is-pop .card { animation: pop .5s var(--ease); }
 
 /* 寬螢幕：卡片攤成一手牌 */
 @media (min-width: 721px) {
@@ -438,15 +427,6 @@ main h2 {
     pointer-events: none;
   }
   .slot.is-fly { z-index: 300; }
-
-  /* 洗牌：全部疊到中間 */
-  .hand.is-stack .slot {
-    --active: 0;
-    transform: translate(var(--jx, 0px), calc(var(--n) * -1.5px)) rotate(var(--jr, 0deg));
-    transition-duration: .42s;
-    pointer-events: none;
-  }
-  .hand.is-stack.is-backs .slot { transition-duration: .11s; }
 
   /* 手牌上的卡片比較小，只放名稱；一句話介紹會顯示在卡片下面 */
   .hand .card__sum { display: none; }

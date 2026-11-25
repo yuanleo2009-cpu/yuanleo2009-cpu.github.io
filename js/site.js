@@ -489,7 +489,7 @@
     H.run++;
     H.busy = false;
     $("#draw").disabled = false;
-    hand.classList.remove("is-leaving", "is-stack", "is-gather", "is-backs", "is-reveal", "is-closed");
+    hand.classList.remove("is-leaving", "is-drawing", "is-closed");
     document.title = name ? t("siteTitle", { name: name }) : t("allWorks");
 
     nameEl.innerHTML =
@@ -737,34 +737,112 @@
 
     H.busy = true;
     btn.disabled = true;
+
+    // 開始之前，先記下每張卡片現在的樣子（位置、角度、有沒有被抬起來），動畫要從這裡接下去才不會跳
+    const num = (v) => parseFloat(v) || 0;
+    const spread = num(hand.style.getPropertyValue("--spread"));
+    const angle = num(hand.style.getPropertyValue("--angle"));
+    const drop = num(hand.style.getPropertyValue("--drop"));
+    const before = H.slots.map((s) => {
+      const cs = getComputedStyle(s), tf = cs.transform;
+      const m = tf && tf !== "none" ? tf.slice(tf.indexOf("(") + 1, -1).split(",").map(Number) : [];
+      const flat = m.length === 6;
+      return {
+        x: flat ? m[4] : 0,
+        y: flat ? m[5] : 0,
+        rot: flat ? (Math.atan2(m[1], m[0]) * 180) / Math.PI : 0,
+        up: num(cs.getPropertyValue("--active")),   // 1 = 被抬起來（滑鼠在上面，或是上一次抽到的）
+        lift: num(cs.getPropertyValue("--lift")),
+        grow: num(cs.getPropertyValue("--grow")),
+        i: num(s.style.getPropertyValue("--i"))
+      };
+    });
+
     deactivate();
-    hand.classList.add("is-stack", "is-gather");
-    // 洗牌洗到一半，畫面被重畫了（例如去了作品頁），後面的步驟就不要再做
+    hand.classList.add("is-drawing");
+
+    // 整段動畫一次交給瀏覽器的動畫引擎跑，而且只動位置、角度和透明度。
+    // 這樣瀏覽器可以用顯示卡畫，不用每一格都重算，在平板上也會很順。
+    const GATHER = 440, PASS = 400, PASSES = 2, REVEAL = 640, STEP = 45;   // 每一段的時間（毫秒）
+    const smooth = "cubic-bezier(.45, 0, .2, 1)", settle = "cubic-bezier(.2, .8, .2, 1)";
+    const w = H.slots[0].offsetWidth;
+    const shuffled = GATHER + PASS * PASSES;   // 洗完牌的時間
+    // 每一格都用同樣的寫法（順序要跟 style.css 裡的 transform 一樣），瀏覽器才能交給顯示卡順順地接
+    const place = (x, y, deg) => "translate(" + x.toFixed(1) + "px, " + y.toFixed(1) + "px) rotate(" + deg.toFixed(2) + "deg)";
+    const pose = (b, up, flip) =>
+      "translateY(" + (up * b.lift).toFixed(1) + "px) rotate(" + (-b.i * angle * up).toFixed(2) + "deg) " +
+      "scale(" + (1 + up * b.grow).toFixed(3) + ") perspective(900px) rotateX(0deg) rotateY(" + flip + "deg)";
+    const anims = [];
+    let longest = 0;
+
+    H.slots.forEach((s, i) => {
+      const card = s.firstElementChild, back = $(".card__back", card), b = before[i];
+      const reveal = shuffled + i * STEP;   // 這張卡開始攤開的時間（一張接一張）
+      const D = reveal + REVEAL;            // 這張卡整段動畫的長度
+      const at = (ms) => ms / D;
+      const rest = place(0, -1.5 * i, 0);                                    // 疊在中間
+      const home = place(b.i * spread, b.i * b.i * drop, b.i * angle);       // 手牌裡原本的位置
+      longest = Math.max(longest, D);
+      resetTilt(card);
+
+      // 位置：收到中間 → 左右洗兩次 → 攤回手牌
+      const move = [
+        { offset: 0, transform: place(b.x, b.y, b.rot), easing: smooth },
+        { offset: at(GATHER), transform: rest, easing: smooth }
+      ];
+      // 上下順序：洗到最外面的時候對調，看起來才像真的在洗牌
+      const order = [{ offset: 0, zIndex: 10 + i, easing: "steps(1, end)" }];
+      for (let p = 0; p < PASSES; p++) {
+        const side = (i + p) % 2 ? 1 : -1;
+        const far = side * w * (0.4 + 0.08 * ((i + p) % 3));
+        const peak = GATHER + (p + 0.5) * PASS;
+        move.push(
+          { offset: at(peak), transform: place(far, -1.5 * i - 16, side * 7), easing: smooth },
+          { offset: at(GATHER + (p + 1) * PASS), transform: rest, easing: smooth }
+        );
+        order.push({ offset: at(peak), zIndex: (side > 0 ? 40 : 10) + i, easing: "steps(1, end)" });
+      }
+      move.push({ offset: at(reveal), transform: rest, easing: settle }, { offset: 1, transform: home });
+      order.push({ offset: at(reveal), zIndex: 10 + i, easing: "steps(1, end)" }, { offset: 1, zIndex: 10 + i });
+
+      // 翻面：轉到側面的那一瞬間換成背面（或正面），所以不會看到反過來的字
+      const down0 = 110, down1 = GATHER - 20, downMid = (down0 + down1) / 2;
+      const up0 = reveal + 40, up1 = reveal + 480, upMid = (up0 + up1) / 2;
+      anims.push(
+        s.animate(move, { duration: D }),
+        s.animate(order, { duration: D }),
+        card.animate([
+          { offset: 0, transform: pose(b, b.up, 0), easing: smooth },   // 原本被抬起來的卡片先放下
+          { offset: at(down0), transform: pose(b, 0, 0), easing: "ease-in" },
+          { offset: at(downMid), transform: pose(b, 0, 90) },
+          { offset: at(downMid), transform: pose(b, 0, -90), easing: "ease-out" },
+          { offset: at(down1), transform: pose(b, 0, 0) },
+          { offset: at(up0), transform: pose(b, 0, 0), easing: "ease-in" },
+          { offset: at(upMid), transform: pose(b, 0, 90) },
+          { offset: at(upMid), transform: pose(b, 0, -90), easing: "ease-out" },
+          { offset: at(up1), transform: pose(b, 0, 0) },
+          { offset: 1, transform: pose(b, 0, 0) }
+        ], { duration: D }),
+        back.animate([
+          { offset: 0, opacity: 0, easing: "steps(1, end)" },
+          { offset: at(downMid), opacity: 1, easing: "steps(1, end)" },
+          { offset: at(upMid), opacity: 0 },
+          { offset: 1, opacity: 0 }
+        ], { duration: D })
+      );
+    });
+
+    // 全部攤開之後：抽到的那張升起來
     const run = H.run;
-    const later = (fn, ms) => setTimeout(() => { if (run === H.run) fn(); }, ms);
-    later(() => { hand.classList.add("is-backs"); hand.classList.remove("is-gather"); }, 560);
-    for (let j = 0; j < 3; j++) {
-      later(() => H.slots.forEach((s, i) => {
-        const side = (i + j) % 2 ? 1 : -1;
-        s.style.setProperty("--jx", (side * (44 + Math.random() * 50)).toFixed(0) + "px");
-        s.style.setProperty("--jr", (side * (4 + Math.random() * 7)).toFixed(1) + "deg");
-      }), 620 + j * 230);
-      later(() => H.slots.forEach((s) => {
-        s.style.removeProperty("--jx");
-        s.style.removeProperty("--jr");
-      }), 620 + j * 230 + 115);
-    }
-    later(() => {
-      hand.classList.add("is-reveal");
-      hand.classList.remove("is-stack", "is-backs");
+    setTimeout(() => {
+      anims.forEach((a) => a.cancel());
+      if (run !== H.run) return;   // 中途畫面被重畫了（例如去了作品頁），就不用再做
+      hand.classList.remove("is-drawing");
       activate(k, true);
       slot.focus({ preventScroll: true });
-    }, 1340);
-    later(() => {
-      hand.classList.remove("is-reveal");
       H.busy = false;
       btn.disabled = false;
-    }, 1340 + 760 + n * 60);
+    }, longest + 60);
   }
 
   // 只要綁一次的事件
