@@ -216,6 +216,8 @@ window.SITE = {
         "可以把一個帳號的鍵位、靈敏度和準星複製到另一個帳號",
         "可以設定主帳號，其他帳號一鍵套用它的設定",
         "用內建瀏覽器看戰績、逛熱門準星",
+        "登入失效時會馬上提醒，按一下就能重新登入",
+        "遊戲中再按一次按鈕，就能關閉 VALORANT",
         "登入資料用 Windows 內建的加密保護，只有這台電腦解得開"
       ],
       features_en: [
@@ -224,6 +226,8 @@ window.SITE = {
         "Copy keybinds, sensitivity and crosshair from one account to another",
         "Set a main account and apply its settings to the others with one click",
         "Check your match history and browse popular crosshairs in the built-in browser",
+        "Warns you right away when a saved login stops working, with one click to log in again",
+        "Click the button again while in game to close VALORANT",
         "Login data is protected with Windows encryption, so only this computer can open it"
       ],
       screenshots: [],
@@ -242,6 +246,24 @@ window.SITE = {
         "Go back to the app and click \"I'm logged in\". After that, click \"Launch\" on an account card to switch"
       ],
       versions: [
+        {
+          version: "1.0.3",
+          date: "2026-11-25",
+          size: "62 MB",
+          url: "https://github.com/yuanleo2009-cpu/RiotAccountHub/releases/download/v1.0.3/RiotAccountHub-v1.0.3.zip",
+          notes: [
+            "修正：新增帳號時明明有勾「保持登入」，卻一直說沒有勾",
+            "新功能：登入失效時會馬上提醒，按一下就能重新登入",
+            "新功能：遊戲中再按一次按鈕，就能關閉 VALORANT",
+            "切換帳號時不用再多等大約 2 秒"
+          ],
+          notes_en: [
+            "Fixed: when adding an account, it kept saying \"Stay signed in\" was not checked even when it was",
+            "New: it warns you right away when a saved login stops working, and one click lets you log in again",
+            "New: click the button again while in game to close VALORANT",
+            "Switching accounts no longer waits about 2 extra seconds"
+          ]
+        },
         {
           version: "1.0.2",
           date: "2026-11-23",
