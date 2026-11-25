@@ -7,9 +7,13 @@
 
   const SITE = window.SITE || {};
   const works = (Array.isArray(SITE.works) ? SITE.works : []).filter((w) => w && w.id != null);
-  const page = document.body.dataset.page;
 
-  const $ = (sel, root) => (root || document).querySelector(sel);
+  // 首頁和作品頁都放在 index.html 裡，用網址後面的 #作品代號 切換畫面（所以換畫面時卡片的動畫不會斷掉）
+  const hashId = () => { try { return decodeURIComponent(location.hash.slice(1)); } catch (e) { return ""; } };
+  const viewNow = () => (works.some((w) => String(w.id) === hashId()) ? "work" : "home");
+  let page = viewNow();   // 現在的畫面："home"（首頁）或 "work"（作品頁）
+
+  const $ =(sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -146,7 +150,7 @@
     const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(s || "").trim());
     return m ? m[1] + "/" + m[2].padStart(2, "0") + "/" + m[3].padStart(2, "0") : String(s || "");
   };
-  const workUrl = (w) => "work.html?id=" + encodeURIComponent(w.id);
+  const workUrl = (w) => "#" + encodeURIComponent(w.id);
   const dlAttrs = (url) => {
     const u = hasLink(url) ? safeUrl(url) : "";
     if (!u) return 'href="#" data-nolink';
@@ -458,11 +462,17 @@
      首頁
      ============================================================ */
 
-  const H = { slots: [], chars: [], active: -1, busy: false, push: 60, last: -1, filter: "", fontSize: 0 };
+  const H = { slots: [], chars: [], active: -1, busy: false, push: 60, last: -1, filter: "", fontSize: 0, run: 0 };
 
   function renderHome(first) {
     const hand = $("#hand"), nameEl = $("#name");
     const name = String(SITE.name || "");
+
+    // 重畫之前，把還沒跑完的動畫狀態清掉（例如洗牌洗到一半就去了別的畫面）
+    H.run++;
+    H.busy = false;
+    $("#draw").disabled = false;
+    hand.classList.remove("is-leaving", "is-stack", "is-gather", "is-backs", "is-reveal", "is-closed");
     document.title = name ? t("siteTitle", { name: name }) : t("allWorks");
 
     nameEl.innerHTML =
@@ -483,7 +493,7 @@
     } else {
       const mid = (works.length - 1) / 2;
       hand.innerHTML = works.map((w, n) =>
-        '<a class="slot" href="' + esc(workUrl(w)) + '" style="--i:' + (n - mid) + ";--n:" + n + '" draggable="false">' +
+        '<a class="slot" href="' + esc(workUrl(w)) + '" data-work="' + esc(w.id) + '" style="--i:' + (n - mid) + ";--n:" + n + '" draggable="false">' +
         cardHTML(w, n) + "</a>"
       ).join("");
     }
@@ -589,16 +599,22 @@
     }
     const W = hand.clientWidth, w = H.slots[0].offsetWidth, half = (n - 1) / 2;
     const few = n <= 3;   // 作品少的時候，卡片大一點、攤開一點
-    hand.style.setProperty("--spread", (n > 1 ? Math.min(w * (few ? 0.94 : 0.8), (W - w) / (n - 1)) : 0).toFixed(1) + "px");
-    hand.style.setProperty("--angle", (n > 1 ? Math.min(few ? 10 : 7, 40 / (n - 1)) : 0).toFixed(2) + "deg");
+    const angle = n > 1 ? Math.min(few ? 10 : 7, 40 / (n - 1)) : 0;
+    // 最外面的卡片是斜的，上面的角會往外凸。凸出畫面的部分要扣掉，卡片才不會被切到
+    const lean = Math.sin((angle * half * Math.PI) / 180) * w * 1.4;
+    const room = W - 2 * Math.max(0, lean - hand.getBoundingClientRect().left);
+    hand.style.setProperty("--spread", (n > 1 ? Math.max(0, Math.min(w * (few ? 0.94 : 0.8), (room - w) / (n - 1))) : 0).toFixed(1) + "px");
+    hand.style.setProperty("--angle", angle.toFixed(2) + "deg");
     hand.style.setProperty("--drop", (half > 0 ? Math.min(10, 46 / (half * half)) : 0).toFixed(2) + "px");
     H.push = Math.min(w * 0.3, 80);
   }
 
   // 第一次打開：從下面發牌。之後再回首頁就直接擺好
+  let dealtOnce = false;
   function shouldDeal() {
-    let seen = false;
-    try { seen = sessionStorage.getItem("dealt") === "1"; sessionStorage.setItem("dealt", "1"); } catch (e) { /* 沒關係 */ }
+    let seen = dealtOnce;
+    dealtOnce = true;
+    try { seen = seen || sessionStorage.getItem("dealt") === "1"; sessionStorage.setItem("dealt", "1"); } catch (e) { /* 沒關係 */ }
     return !calm && !seen && wide.matches;
   }
   function deal() {
@@ -627,18 +643,7 @@
     });
     slot.addEventListener("focus", () => { if (slot.matches(":focus-visible")) activate(k); });
     slot.addEventListener("blur", () => { if (wide.matches && H.active === k && !slot.matches(":hover")) deactivate(); });
-    // 點下去：其他卡掉下去，這張飛到中間，再換到作品頁
-    slot.addEventListener("click", (e) => {
-      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      if (!wide.matches || calm) return;
-      e.preventDefault();
-      if (H.busy) return;
-      H.busy = true;
-      activate(k, true);
-      slot.classList.add("is-chosen");
-      $("#hand").classList.add("is-leaving");
-      setTimeout(() => { location.href = slot.href; }, 430);
-    });
+    // 點下去會換到作品頁（卡片直接飛過去）。那段寫在最下面的「換畫面」
     tilt(slot, card);
     grab(slot, card, () => wide.matches && !H.busy);
   }
@@ -717,25 +722,28 @@
     btn.disabled = true;
     deactivate();
     hand.classList.add("is-stack", "is-gather");
-    setTimeout(() => { hand.classList.add("is-backs"); hand.classList.remove("is-gather"); }, 560);
+    // 洗牌洗到一半，畫面被重畫了（例如去了作品頁），後面的步驟就不要再做
+    const run = H.run;
+    const later = (fn, ms) => setTimeout(() => { if (run === H.run) fn(); }, ms);
+    later(() => { hand.classList.add("is-backs"); hand.classList.remove("is-gather"); }, 560);
     for (let j = 0; j < 3; j++) {
-      setTimeout(() => H.slots.forEach((s, i) => {
+      later(() => H.slots.forEach((s, i) => {
         const side = (i + j) % 2 ? 1 : -1;
         s.style.setProperty("--jx", (side * (44 + Math.random() * 50)).toFixed(0) + "px");
         s.style.setProperty("--jr", (side * (4 + Math.random() * 7)).toFixed(1) + "deg");
       }), 620 + j * 230);
-      setTimeout(() => H.slots.forEach((s) => {
+      later(() => H.slots.forEach((s) => {
         s.style.removeProperty("--jx");
         s.style.removeProperty("--jr");
       }), 620 + j * 230 + 115);
     }
-    setTimeout(() => {
+    later(() => {
       hand.classList.add("is-reveal");
       hand.classList.remove("is-stack", "is-backs");
       activate(k, true);
       slot.focus({ preventScroll: true });
     }, 1340);
-    setTimeout(() => {
+    later(() => {
       hand.classList.remove("is-reveal");
       H.busy = false;
       btn.disabled = false;
@@ -829,7 +837,7 @@
   function renderWork(first) {
     const app = $("#app");
     app.classList.toggle("is-enter", !!first);
-    const id = new URLSearchParams(location.search).get("id");
+    const id = hashId();
     const index = works.findIndex((w) => String(w.id) === String(id));
     $("#home").textContent = SITE.name || "Home";
 
@@ -837,7 +845,7 @@
       document.title = t("nfTitle");
       app.innerHTML =
         '<section class="none"><h1>' + t("nfTitle") + "</h1><p>" + t("nfBody") + "</p>" +
-        '<p><a href="index.html#works">' + t("nfLink") + "</a></p></section>";
+        '<p><a href="#works">' + t("nfLink") + "</a></p></section>";
       return;
     }
 
@@ -865,7 +873,7 @@
 
     app.innerHTML =
       '<section class="work">' +
-        '<div class="work__card"><div class="solo" id="solo" aria-hidden="true">' + cardHTML(w, index) + "</div></div>" +
+        '<div class="work__card"><div class="solo" id="solo" data-work="' + esc(w.id) + '" aria-hidden="true">' + cardHTML(w, index) + "</div></div>" +
         '<div class="work__info">' +
           (kind ? '<p class="work__kind">' + kind + "</p>" : "") +
           "<h1>" + esc(title) + "</h1>" +
@@ -900,7 +908,7 @@
 
       (others.length
         ? '<section class="more"><h2>' + t("more") + '</h2><div class="more__row">' +
-          others.map((x) => '<a href="' + esc(workUrl(x.o)) + '">' + cardHTML(x.o, x.i) + "</a>").join("") +
+          others.map((x) => '<a href="' + esc(workUrl(x.o)) + '" data-work="' + esc(x.o.id) + '">' + cardHTML(x.o, x.i) + "</a>").join("") +
           "</div></section>"
         : "");
 
@@ -916,27 +924,25 @@
   function render(first) {
     document.documentElement.lang = lang === "zh" ? "zh-Hant" : "en";
     $$("[data-t]").forEach((el) => { el.textContent = t(el.dataset.t); });
-    const lb = $("#lang");
-    if (lb) { lb.textContent = t("langBtn"); lb.lang = lang === "zh" ? "en" : "zh-Hant"; }
+    $$(".lang").forEach((lb) => { lb.textContent = t("langBtn"); lb.lang = lang === "zh" ? "en" : "zh-Hant"; });
     const demo = $("#demo");
     if (demo) { demo.hidden = !SITE.demo; demo.textContent = t("demo"); }
     const foot = $("#foot");
     if (foot) {
       foot.innerHTML = "<span>© " + new Date().getFullYear() + " " + esc(SITE.name || "") + "</span>" +
-        '<a href="#top">' + t("backTop") + "</a>";
+        '<a href="#top" data-top>' + t("backTop") + "</a>";
     }
     if (page === "home") renderHome(first);
     else if (page === "work") renderWork(first);
   }
 
-  const langBtn = $("#lang");
-  if (langBtn) {
-    langBtn.addEventListener("click", () => {
+  $$(".lang").forEach((btn) => {
+    btn.addEventListener("click", () => {
       lang = lang === "zh" ? "en" : "zh";
       try { localStorage.setItem("lang", lang); } catch (e) { /* 沒關係 */ }
       render(false);
     });
-  }
+  });
 
   // 還沒放下載連結的按鈕：按了會出現提示，不會亂跳
   document.addEventListener("click", (e) => {
@@ -946,25 +952,189 @@
     toast(SITE.demo ? t("toastDemo") : t("toastNone"));
   });
 
-  // 按「上一頁」回到首頁時，把剛剛掉下去的卡片擺回來
-  addEventListener("pageshow", (e) => {
-    if (!e.persisted) return;
-    // 在另一頁換過語言的話，這一頁也跟著換
-    let saved = lang;
-    try { saved = localStorage.getItem("lang") || lang; } catch (err) { /* 沒關係 */ }
-    if ((saved === "zh" || saved === "en") && saved !== lang) { lang = saved; render(false); }
-    if (page !== "home") return;
-    H.busy = false;
-    $("#hand").classList.remove("is-leaving");
-    H.slots.forEach((s) => s.classList.remove("is-chosen"));
-    deactivate();
-    if (!wide.matches) onHandScroll();
+  /* ============================================================
+     換畫面：首頁 ↔ 作品頁
+     卡片不會消失再出現，而是從原本的位置直接飛到新的位置
+     ============================================================ */
+
+  let shown = "";       // 現在顯示的畫面："home" 或 "work:作品代號"
+  let swap = null;      // 正在進行的換畫面動畫
+  let clicked = null;   // 剛剛點的連結（用來知道卡片要從哪裡飛出去）
+  let busyUntil = 0;    // 這個時間之前畫面還在動，先不要重畫
+
+  const viewEl = (name) => $('.view[data-view="' + name + '"]');
+  const workOf = (key) => (key.indexOf("work:") === 0 ? key.slice(5) : "");
+  const indexOfWork = (id) => works.findIndex((w) => String(w.id) === String(id));
+
+  // 這個元素被轉了幾度
+  const rotOf = (el) => {
+    const s = getComputedStyle(el).transform;
+    if (!s || s === "none") return 0;
+    const m = s.slice(s.indexOf("(") + 1, -1).split(",").map(Number);
+    return Math.atan2(m[1], m[0]) || 0;
+  };
+
+  // 量一張卡片現在在畫面上的樣子：中心點、寬度、角度。不在畫面裡就回傳 null
+  function measure(card) {
+    const r = card.getBoundingClientRect();
+    if (!r.width || r.bottom < 40 || r.top > innerHeight - 40 || r.right < 20 || r.left > innerWidth - 20) return null;
+    const rot = rotOf(card.parentElement) + rotOf(card);
+    return {
+      cx: r.left + r.width / 2,
+      cy: r.top + r.height / 2,
+      w: r.width / (Math.abs(Math.cos(rot)) + 1.4 * Math.abs(Math.sin(rot))),   // 卡片是 5:7，斜的時候外框會比較寬
+      rot: rot
+    };
+  }
+
+  // 讓卡片從 from（剛剛量到的樣子）飛到它自己現在的位置
+  function fly(card, from) {
+    const holder = card.parentElement;
+    const box = holder.getBoundingClientRect();
+    const frame = rotOf(holder);
+    const dx = from.cx - (box.left + box.width / 2), dy = from.cy - (box.top + box.height / 2);
+    const cos = Math.cos(-frame), sin = Math.sin(-frame);   // 外層是斜的話，位移要換算一下
+    const start =
+      "translate(" + (dx * cos - dy * sin).toFixed(2) + "px, " + (dx * sin + dy * cos).toFixed(2) + "px) " +
+      "rotate(" + (from.rot - frame).toFixed(4) + "rad) " +
+      "scale(" + (from.w / card.offsetWidth).toFixed(4) + ")";
+    return card.animate([{ transform: start, offset: 0 }], { duration: 700, easing: "cubic-bezier(.45, 0, .15, 1)" });
+  }
+
+  // 捲到對的位置：#works、#about 捲到那一段，其他都回到最上面
+  function scrollToPart(id, smooth) {
+    const how = smooth ? "smooth" : "instant";
+    const el = page === "home" && id && id !== "top" ? document.getElementById(id) : null;
+    if (el && el.getClientRects().length) el.scrollIntoView({ behavior: how, block: "start" });
+    else scrollTo({ top: 0, left: 0, behavior: how });
+  }
+
+  function route() {
+    const id = hashId();
+    const next = viewNow();
+    const key = next === "work" ? "work:" + id : "home";
+    const link = clicked;
+    clicked = null;
+
+    // 同一個畫面：只要捲過去
+    if (key === shown) { scrollToPart(id, !calm); return; }
+
+    if (swap) swap.end();   // 上一次的動畫還沒跑完，先收掉
+    const prev = shown;
+    shown = key;
+    page = next;
+    busyUntil = performance.now() + 950;
+
+    const out = prev ? viewEl(prev.split(":")[0]) : null;
+    const inn = viewEl(next);
+
+    // 第一次打開網頁，或是使用者不要動畫：直接換
+    if (!out || calm) {
+      $$(".view").forEach((v) => { v.hidden = v !== inn; });
+      render(!prev);
+      scrollToPart(id, false);
+      return;
+    }
+
+    // 1. 先量要飛出去的那張卡片：優先用剛剛點的那張，不然就用畫面上代表這個作品的那張
+    let fromCard = link && link.isConnected ? $(".card", link) : null;
+    if (!fromCard && prev === "home") {
+      const s = H.slots[indexOfWork(workOf(key))];
+      fromCard = s ? s.firstElementChild : null;
+    }
+    if (!fromCard && next === "home") fromCard = $("#solo .card");
+    const from = fromCard ? measure(fromCard) : null;
+    const fromHolder = from ? fromCard.parentElement : null;
+
+    // 2. 換畫面。舊的畫面釘在原地慢慢淡出，新的畫面在它上面出現
+    const same = out === inn;   // 從一個作品頁到另一個作品頁
+    let fade = null;
+    if (!same) {
+      out.style.top = -scrollY + "px";
+      out.classList.add("is-out");
+      inn.hidden = false;
+      fade = out.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, easing: "ease-out", fill: "forwards" });
+    }
+    render(false);
+    scrollToPart(id, false);
+
+    // 3. 找到新畫面上的同一張卡片
+    let toCard = null, slot = null;
+    if (next === "work") {
+      toCard = $("#solo .card");
+    } else {
+      const k = indexOfWork(workOf(prev));
+      slot = H.slots[k] || null;
+      if (slot) {
+        toCard = slot.firstElementChild;
+        $("#top").style.setProperty("--c", colorOf(works[k]));   // 光的顏色先接著用這個作品的
+        if (!wide.matches) {   // 手機：先把這張卡片轉到正中間
+          const hand = $("#hand"), hb = hand.getBoundingClientRect(), sb = slot.getBoundingClientRect();
+          hand.scrollLeft += sb.left + sb.width / 2 - (hb.left + hb.width / 2);
+          onHandScroll();
+        }
+      }
+    }
+
+    // 4. 兩邊都看得到卡片，才讓它飛過去；不然就只有淡入淡出
+    const canFly = !!(from && toCard && measure(toCard));
+    if (canFly) {
+      if (!same) {
+        fromHolder.style.visibility = "hidden";
+        if (prev === "home") $("#hand").classList.add("is-leaving");   // 其他的卡片掉下去
+      }
+      if (slot) slot.classList.add("is-fly");
+      inn.classList.add("is-flying");
+    }
+    inn.classList.add("is-swap");   // 新畫面其他的東西淡進來
+    const flight = canFly ? fly(toCard, from) : null;
+
+    // 5. 動畫跑完之後收拾乾淨
+    const me = { end: null };
+    const timer = setTimeout(() => me.end(), 900);
+    me.end = () => {
+      if (swap !== me) return;
+      swap = null;
+      clearTimeout(timer);
+      if (fade) fade.cancel();
+      if (flight) flight.cancel();
+      if (!same) {
+        out.hidden = true;
+        out.classList.remove("is-out");
+        out.style.top = "";
+        if (prev === "home") $("#hand").classList.remove("is-leaving");
+      }
+      if (fromHolder) fromHolder.style.visibility = "";
+      if (slot) slot.classList.remove("is-fly");
+      inn.classList.remove("is-swap", "is-flying");
+    };
+    swap = me;
+  }
+
+  function go(hash) {
+    if (location.hash !== hash) location.hash = hash;   // 網址變了會觸發 hashchange，再由 route() 換畫面
+    else route();
+  }
+
+  addEventListener("hashchange", route);
+
+  // 點網站裡的連結（#作品代號、#works、#about）
+  document.addEventListener("click", (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target.closest('a[href^="#"]');
+    if (!a || a.hasAttribute("data-nolink")) return;
+    e.preventDefault();
+    if (a.hasAttribute("data-top")) { scrollTo({ top: 0, left: 0, behavior: calm ? "instant" : "smooth" }); return; }
+    clicked = a;
+    go(a.getAttribute("href"));
   });
 
   // 抓到 GitHub 上的新版本之後，把畫面上的版本號和下載連結換掉
   function showNewVersions() {
+    // 進場或換畫面的動畫還在跑，等它跑完再換，動畫才不會被打斷
+    const wait = busyUntil - performance.now();
+    if (wait > 0) { setTimeout(showNewVersions, wait + 30); return; }
     if (page === "work") { renderWork(false); return; }
-    if (page !== "home") return;
     H.slots.forEach((slot, k) => {
       const v = latest(works[k]), top = $(".card__top", slot);
       if (!v || !top) return;
@@ -975,7 +1145,7 @@
     renderRows();
   }
 
-  if (page === "home") initHome();
+  initHome();
   loadReleases(showNewVersions);
-  render(true);
+  route();
 })();

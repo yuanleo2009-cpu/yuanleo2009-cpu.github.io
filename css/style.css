@@ -431,20 +431,13 @@ main h2 {
   .hand.is-dealing .slot { transition-duration: .9s; transition-delay: calc(var(--n) * 80ms); }
   .hand.is-closed .slot { transform: translate(0, 0) rotate(0deg); }
 
-  /* 點了一張卡：其他的掉下去，選到的飛到中間變大，然後換頁 */
+  /* 點了一張卡：其他的掉下去（選到的那張會直接飛到作品頁，寫在最下面的「換畫面」） */
   .hand.is-leaving .slot {
     transform: translate(calc(var(--i) * var(--spread, 0px) * 1.5), 110vh) rotate(calc(var(--i) * 16deg));
     transition: transform .5s cubic-bezier(.5, 0, .9, .45);
     pointer-events: none;
   }
-  .hand.is-leaving .slot.is-chosen {
-    --active: 1;
-    --grow: .24;
-    --lift: -30px;
-    z-index: 300;
-    transform: translate(0, 0) rotate(0deg);
-    transition: transform .45s var(--ease);
-  }
+  .slot.is-fly { z-index: 300; }
 
   /* 洗牌：全部疊到中間 */
   .hand.is-stack .slot {
@@ -459,7 +452,7 @@ main h2 {
   .hand .card__sum { display: none; }
   .hand .card__title { font-size: 2.4em; }
 
-  .demo:not([hidden]) + .hero { min-height: calc(100svh - 35px); }
+  .demo:not([hidden]) + .view .hero { min-height: calc(100svh - 35px); }
 }
 
 /* 平板直拿：螢幕又高又窄，卡片放大一點，放在名字和下面文字的正中間 */
@@ -798,6 +791,46 @@ main h2 {
 @media (hover: hover) { .more__row a:hover { --active: 1; transform: translateY(-8px) rotate(-2deg); } }
 .more__row .card__sum { display: none; }
 .more__row .card__title { font-size: 2.3em; }
+
+/* ---------- 換畫面：首頁 ↔ 作品頁 ---------- */
+
+.view { position: relative; z-index: 1; }
+
+/* 正在離開的畫面：釘在原地淡出，新的畫面蓋在它上面 */
+.view.is-out {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* 新的畫面：卡片是飛過來的，其他的東西淡進來 */
+@keyframes fade { from { opacity: 0; } }
+@keyframes slot-in {
+  from { transform: translate(calc(var(--i) * var(--spread, 0px) * 1.5), 110vh) rotate(calc(var(--i) * 16deg)); }
+}
+.is-swap .top--bar,
+.is-swap .blocks,
+.is-swap .more,
+.is-swap .none,
+.is-swap .hero > .top,
+.is-swap .hero__name,
+.is-swap .hero__cap,
+.is-swap .hero__foot,
+.is-swap .index,
+.is-swap .about { animation: fade .5s .08s both; }
+.is-swap .work::before,
+.is-swap .hero::before { animation: fade .6s both; }
+.is-swap .work__info { animation: rise .6s .12s var(--ease) both; }
+.is-swap .work__card,
+.is-swap .slot { animation: fade .45s both; }
+.is-swap.is-flying .work__card,
+.is-swap .slot.is-fly { animation: none; }
+@media (min-width: 721px) {
+  /* 回到首頁：其他的卡片從下面飛回手牌 */
+  .is-swap .slot:not(.is-fly) { animation: slot-in .55s var(--ease) both; animation-delay: calc(min(var(--n), 8) * 30ms); }
+}
 
 /* ---------- 找不到 / 沒有資料 ---------- */
 

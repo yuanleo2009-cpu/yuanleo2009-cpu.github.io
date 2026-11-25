@@ -4,31 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>作品</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400..900&family=Unbounded:wght@200..900&display=swap" rel="stylesheet">
-  <!-- 後面的 ?v=數字：改了 style.css 或 site.js 之後把數字加 1，大家的瀏覽器才會馬上拿到新的檔案 -->
-  <link rel="stylesheet" href="css/style.css?v=2">
-  <script src="data.js" defer blocking="render"></script>
-  <script src="js/site.js?v=2" defer blocking="render"></script>
+  <script>
+    // 作品頁現在放在 index.html 裡了。
+    // 舊的網址（work.html?id=作品代號）會自動轉到新的網址（index.html#作品代號）。
+    var id = new URLSearchParams(location.search).get("id");
+    location.replace("./" + (id ? "#" + encodeURIComponent(id) : ""));
+  </script>
 </head>
-<body data-page="work">
-
-  <p class="demo" id="demo" hidden></p>
-
-  <header class="top top--bar">
-    <a class="top__home" href="index.html" id="home"></a>
-    <nav class="top__links">
-      <a href="index.html#works" data-t="allWorks">全部作品</a>
-      <a href="index.html#about" data-t="navAbout">關於</a>
-      <button class="lang" id="lang" type="button">English</button>
-    </nav>
-  </header>
-
-  <main id="app"></main>
-
-  <footer class="foot" id="foot"></footer>
-
-  <noscript><p class="none">這個網站需要開啟 JavaScript 才看得到內容。</p></noscript>
+<body style="margin:0;padding:40px 20px;background:#000;color:#f4f3ef;font-family:sans-serif">
+  <p><a href="./" style="color:inherit">回首頁 / Home</a></p>
 </body>
 </html>
